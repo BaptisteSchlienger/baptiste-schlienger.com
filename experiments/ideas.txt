@@ -1,0 +1,14 @@
+PopcornQuizz
+    - quizz about movies, multiple modes (timed/tries and poster/frame)
+    - an image of the movie (the poster or a still frame) is displayed very heavilypixelated
+    - users must guess the title of the movie
+    - timed mode: users get 30s, every second the movie gets less pixelated (pixels become smaller), infinite tries
+    - tries mode: users get 5 tries, every try the movie gets less pixelated (pixels become smaller), infinite time
+    - use an opensource API to get list of 100+ top most famous movies titles and posters (and stillframes if possible)
+pokedle
+    - worldle but for pokemon, black shape of the pokemon is displayed, users must guess
+    - upon every failed try, hints are given (type, generation, region ...etc)
+trackle
+    - worldle but for race tracks, black shape of the track is displayed, users must guess
+    - upon every failed try, hints are given (country, region, length ...etc)
+

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PopcornQuizz | Movie Guessing Game</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:wght@700;900&family=JetBrains+Mono&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="cinema-overlay"></div>
+
+    <header>
+        <a href="../../index.html" class="back-btn"><i class="fas fa-arrow-left"></i> Home</a>
+        <div class="logo">
+            <i class="fas fa-film"></i>
+            <h1>PopcornQuizz</h1>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Game Intro / Setup -->
+        <section id="setup-screen" class="screen active">
+            <div class="setup-card glass">
+                <h2>Choose Your Challenge</h2>
+                <div class="settings-group">
+                    <h3>Game Mode</h3>
+                    <div class="mode-options">
+                        <button class="mode-btn active" data-mode="timed">
+                            <i class="fas fa-stopwatch"></i>
+                            <span>Timed</span>
+                            <small>30s to guess</small>
+                        </button>
+                        <button class="mode-btn" data-mode="tries">
+                            <i class="fas fa-list-ol"></i>
+                            <span>Tries</span>
+                            <small>5 attempts</small>
+                        </button>
+                    </div>
+                </div>
+
+                <button id="start-game" class="cta-btn">Start Playing <i class="fas fa-play"></i></button>
+            </div>
+        </section>
+
+        <!-- Game Active -->
+        <section id="game-screen" class="screen">
+            <div class="movie-canvas-container glass">
+                <canvas id="movie-canvas"></canvas>
+                <div class="loading-overlay">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Fetching next movie...</p>
+                </div>
+            </div>
+
+            <div id="visual-progress" class="visual-progress"></div>
+
+            <div id="hints-container" class="hints-container">
+                <div class="hint-item" id="hint-runtime"><i class="fas fa-clock"></i> <span></span></div>
+                <div class="hint-item" id="hint-year"><i class="fas fa-calendar-alt"></i> <span></span></div>
+                <div class="hint-item" id="hint-genre"><i class="fas fa-tags"></i> <span></span></div>
+                <div class="hint-item" id="hint-director"><i class="fas fa-user-tie"></i> <span></span></div>
+            </div>
+
+            <div class="input-area">
+                <div class="input-wrapper glass">
+                    <input type="text" id="guess-input" placeholder="Guess the movie title..." autocomplete="off">
+                    <button id="submit-guess"><i class="fas fa-check"></i></button>
+                </div>
+                <button id="skip-try" class="skip-btn" style="display: none;">Skip Try <i
+                        class="fas fa-forward"></i></button>
+                <div id="feedback" class="feedback"></div>
+            </div>
+        </section>
+
+        <!-- Result Screen -->
+        <section id="result-screen" class="screen">
+            <div id="confetti-container"></div>
+            <div class="result-card glass">
+                <div class="result-icon">
+                    <i id="outcome-icon" class="fas fa-trophy"></i>
+                </div>
+                <h2 id="outcome-title">Game Over</h2>
+                <div class="final-score">
+                    <span class="label">Round Score</span>
+                    <span id="final-score-val" class="value">0</span>
+                </div>
+                <div id="final-movie-reveal" class="final-movie-reveal">
+                    <img id="final-movie-img" src="" alt="Final Movie">
+                    <h3 id="final-movie-title"></h3>
+                </div>
+                <p id="result-message"></p>
+                <div id="final-movie-info" class="final-movie-info">
+                    <div id="final-plot" class="final-plot"></div>
+                    <div id="final-hints" class="final-hints"></div>
+                </div>
+                <button id="restart-game" class="cta-btn secondary">Play Again <i class="fas fa-redo"></i></button>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
