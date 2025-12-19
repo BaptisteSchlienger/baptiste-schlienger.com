@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animated ASCII Background | Baptiste Schlienger Experiments</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&family=Outfit:wght@400;600;900&display=swap"
+        rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <header id="site-header">
+        <div class="header-left">
+            <a href="../../index.html" class="back-link glass"><i class="fas fa-chevron-left"></i> Back to Portfolio</a>
+        </div>
+        <div class="header-content glass">
+            <h1>Animated ASCII</h1>
+            <p>Background Lab</p>
+        </div>
+    </header>
+
+    <canvas id="ascii-canvas"></canvas>
+
+    <main class="controls-wrapper">
+        <div class="controls-card glass">
+            <div class="controls-header">
+                <h2>Configuration</h2>
+                <button id="randomize-btn" title="Randomize Settings"><i class="fas fa-dice"></i></button>
+            </div>
+
+            <div class="controls-body">
+                <!-- Noise Settings -->
+                <div class="control-group">
+                    <label>Noise Algorithm</label>
+                    <div class="toggle-group">
+                        <button class="toggle-btn active" data-noise="perlin">Perlin</button>
+                        <button class="toggle-btn" data-noise="voronoi">Voronoi</button>
+                        <button class="toggle-btn" data-noise="random">Random</button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="label-row">
+                        <label>Complexity / Level</label>
+                        <span id="noise-level-val" class="val">0.03</span>
+                    </div>
+                    <input type="range" id="noise-level" min="0.005" max="0.1" step="0.001" value="0.03">
+                </div>
+
+                <div class="control-group">
+                    <div class="label-row">
+                        <label>Animation Speed</label>
+                        <span id="speed-val" class="val">1.0x</span>
+                    </div>
+                    <input type="range" id="speed" min="0.1" max="5.0" step="0.1" value="1.0">
+                </div>
+
+                <!-- Font Settings -->
+                <div class="control-group">
+                    <div class="label-row">
+                        <label>Font Size</label>
+                        <span id="font-size-val" class="val">14px</span>
+                    </div>
+                    <input type="range" id="font-size" min="12" max="40" value="14">
+                </div>
+
+                <!-- Colors -->
+                <div class="control-group">
+                    <label>Colors</label>
+                    <div id="color-palette" class="color-palette">
+                        <!-- Dynamic color items -->
+                    </div>
+                    <div class="palette-actions">
+                        <div id="bg-color-container" class="color-item" style="background-color: #ffffff;">
+                            <input type="color" id="bg-color-picker" value="#ffffff"
+                                style="opacity:0; width:100%; height:100%; cursor:pointer;">
+                        </div>
+                        <label for="bg-color-picker" class="bg-label">Background Color</label>
+                    </div>
+                </div>
+
+                <!-- Effects -->
+                <div class="control-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="cursor-effect" checked>
+                        <span>Enable Cursor Ripple</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="controls-footer">
+                <button id="export-btn" class="cta-btn"><i class="fas fa-download"></i> Export as HTML</button>
+            </div>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

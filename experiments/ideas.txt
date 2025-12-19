@@ -11,4 +11,12 @@ pokedle
 trackle
     - worldle but for race tracks, black shape of the track is displayed, users must guess
     - upon every failed try, hints are given (country, region, length ...etc)
-
+AnimatedAsciiBackground
+    - just like the banner on my website homepage
+    - choose the noise type, level
+    - choose the font type and size
+    - choose the colors (background color + multiple text colors [1min - 10max])
+    - enable / disable the cursor effect
+    - show the live preview in the background and have the effect window on top
+    - add a randomize button to change the settings randomly
+    - export button to download the effect as a .html file
