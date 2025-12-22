@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SlayWare | WIP</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+
+<body>
+    <!-- Setup Screen -->
+    <div id="setup-screen" class="setup-overlay">
+        <div class="setup-card glass">
+            <h2>SlayWare Setup</h2>
+            <p>Divide and Conquer the Island.</p>
+
+            <div class="setup-form">
+                <div class="form-group">
+                    <label>Human Players</label>
+                    <div class="player-count-select">
+                        <button class="count-btn active" data-humans="1">1</button>
+                        <button class="count-btn" data-humans="2">2</button>
+                        <button class="count-btn" data-humans="3">3</button>
+                        <button class="count-btn" data-humans="4">4</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Total Players (Humans + AI)</label>
+                    <div class="player-count-select">
+                        <button class="total-btn" data-total="6">6</button>
+                        <button class="total-btn" data-total="5">5</button>
+                        <button class="total-btn active" data-total="4">4</button>
+                        <button class="total-btn" data-total="3">3</button>
+                        <button class="total-btn" data-total="2">2</button>
+                    </div>
+                </div>
+
+                <button id="start-game-btn" class="primary-btn wide">Start Conquest</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Game UI (Initially Hidden) -->
+    <div id="game-ui" class="hidden">
+        <header>
+            <div class="header-left">
+                <a href="../../index.html#experiments" class="back-link"><i class="fas fa-arrow-left"></i> Portfolio</a>
+            </div>
+            <div class="header-center">
+                <h1>SlayWare</h1>
+            </div>
+            <div class="header-right">
+                <button id="help-btn" class="secondary-btn"><i class="fas fa-question-circle"></i> Help</button>
+                <button id="end-turn-btn" class="primary-btn">End Turn <i class="fas fa-forward"></i></button>
+            </div>
+        </header>
+
+        <div id="help-modal" class="modal glass hidden">
+            <div class="modal-content">
+                <span class="close-modal">&times;</span>
+                <h2>How to Play SlayWare</h2>
+                <div class="help-scroll">
+                    <h3>Objective</h3>
+                    <p>Capture the whole island by killing all enemy units and capturing their land.</p>
+
+                    <h3>Action Indicators</h3>
+                    <ul>
+                        <li><span style="color:red; font-weight:bold;">●</span> <strong>Red Dot (Unit):</strong> This
+                            unit is ready to act ("Jumping man").</li>
+                        <li><span style="color:red; font-weight:bold;">●</span> <strong>Red Dot (Capital):</strong>
+                            Treasury has enough money to buy units or castles.</li>
+                    </ul>
+
+                    <h3>Movement & Combat</h3>
+                    <ul>
+                        <li><strong>Movement:</strong> You can move a unit <strong>infinitely</strong> within its own
+                            territory.</li>
+                        <li><strong>Combat:</strong> Moving to an adjacent enemy tile or a tree consumes the unit's
+                            action for the turn.</li>
+                        <li><strong>Defense:</strong> A tile is defended by its occupant and all neighbors in the
+                            <strong>same territory</strong>.
+                        </li>
+                        <li><strong>Strength:</strong> Peasant(1), Spearman(2), Knight(3), Baron(4). Castles defend with
+                            strength 2.</li>
+                    </ul>
+
+                    <h3>Economics</h3>
+                    <ul>
+                        <li><strong>Income:</strong> +1 credit per hexagon (without trees).</li>
+                        <li><strong>Wages:</strong> Peasant(2), Spearman(6), Knight(18), Baron(54).</li>
+                        <li><strong>Bankruptcy:</strong> If wages exceed money at turn start, all units die and become
+                            trees!</li>
+                        <li><strong>Costs:</strong> New Peasants cost 10c, Castles cost 15c.</li>
+                    </ul>
+
+                    <h3>Merging</h3>
+                    <p>Combine two units to create a stronger one (e.g., Peasant + Peasant = Spearman). Be careful of
+                        the higher wages!</p>
+                </div>
+            </div>
+        </div>
+        <div id="game-over-modal" class="modal glass hidden">
+            <div class="modal-content game-over-content">
+                <h2 id="winner-announce">Winner!</h2>
+                <div class="stats-grid" id="game-over-stats"></div>
+                <button id="restart-btn" class="primary-btn wide">Play Again <i class="fas fa-redo"></i></button>
+            </div>
+        </div>
+        <main class="game-container">
+            <section class="map-view">
+                <canvas id="game-canvas"></canvas>
+            </section>
+
+            <aside class="sidebar glass">
+                <div class="sidebar-section player-list" id="player-status-panel">
+                    <h3>Leaderboard</h3>
+                    <div id="players-container" class="players-container">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <div class="sidebar-section territory-info">
+                    <h2 id="player-indicator" class="player-1">Player 1's Turn</h2>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <span class="label">Land</span>
+                            <span id="stat-land" class="value">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="label">Income</span>
+                            <span id="stat-income" class="value">+0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="label">Wages</span>
+                            <span id="stat-wages" class="value">-0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="label">Balance</span>
+                            <span id="stat-balance" class="value">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section shop" id="shop-container">
+                    <h3>Unit Shop</h3>
+                    <div class="shop-grid">
+                        <button class="shop-item" data-unit="peasant" title="Peasant (10c)">
+                            <i class="fas fa-user"></i>
+                            <span>10c</span>
+                        </button>
+                        <button class="shop-item" data-unit="castle" title="Castle (15c)">
+                            <i class="fas fa-fort-awesome"></i>
+                            <span>15c</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="sidebar-section history">
+                    <h3>Event Log</h3>
+                    <div id="event-log" class="event-log">
+                        <p class="log-entry system">Island initialized. Prepare for glory.</p>
+                    </div>
+                </div>
+            </aside>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+
+</html>

@@ -20,3 +20,62 @@ AnimatedAsciiBackground
     - show the live preview in the background and have the effect window on top
     - add a randomize button to change the settings randomly
     - export button to download the effect as a .html file
+SlayWare
+    - Webversion of the classic game Slay
+
+Language & Meaning (but not just guessing words)
+    Synonym Ladder
+        - Guess a target word by submitting synonyms. Feedback shows semantic closeness (not letters).
+        - Example: “angry” → 🔥🔥🔥, “furious” → 🔥🔥🔥🔥🔥
+    Definitionle
+        - You’re given a cryptic dictionary-style definition and must guess the word in 6 tries.
+    False Friend
+        - Guess the correct meaning of a word that looks familiar but is misleading (great for language learners).
+    Word Family
+        - The target word belongs to a hidden family (prefix/root/suffix). Guesses reveal whether roots match.
+
+Logic-Based Variants
+    Patternlock
+        - Guess a hidden pattern (e.g., ABAAB, ABCDE). Letters don’t matter, only repetition structure.
+    Constraintle
+        - Each guess adds a new rule (e.g., “must contain exactly 2 vowels”). You must deduce the final word.
+    Binaryle
+        - Target is a 6-bit binary number. Guesses give feedback on bit position correctness.
+
+Sound & Phonetics
+    Phonemle
+        - Guess a word by phonemes instead of letters. Feedback is based on sound similarity.
+    Rhymle
+        - You must guess a word that perfectly rhymes with the target. Feedback shows syllable and stress match.
+
+Visual / Spatial (still text-light)
+    Glyph Guess
+        - Each guess reveals a stylized glyph representing letter shapes or symmetry, not the letters themselves.
+    Directionle
+        - Guess a path (↑ ↓ ← →). Correct directions and positions are highlighted like Wordle letters.
+
+Numbers & Sequences
+    Seqle
+        - Guess the next number in a hidden sequence. Each wrong guess reveals a property (arithmetic, geometric, etc.).
+    Statle
+        - Guess a hidden statistical summary (mean, median, max). Guesses reveal distance from correct values.
+
+Knowledge-Light Trivia Hybrids
+    Yearle (but smarter)
+        - Guess a year tied to an event. Feedback shows before/after and historical closeness.
+    Orderle
+        - Guess the correct order of 5 items (e.g., inventions, sizes, ages). Feedback highlights correct positions.
+
+Emotional / Subjective (surprisingly unexplored)
+    Vibele
+        - Guess a word that matches a mood descriptor (e.g., “cozy,” “ominous”). Feedback is crowd-sourced similarity.
+    Intensity
+        - Guess a word on a scale (warm → hot → scorching). Feedback shows relative intensity.
+
+Ultra-Minimal Experiments
+    Yes/No
+        - You can only ask yes/no questions. The goal is to identify a secret word in under 10 questions.
+    One Hint
+        - You get exactly one cryptic hint. One guess only. Daily challenge.
+    Reverse Wordle
+        - The game gives feedback first, and you must find a word that would produce it.
