@@ -451,7 +451,7 @@ header {
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 1000;
+    z-index: 3000;
 }
 
 .modal.hidden {
@@ -583,4 +583,66 @@ header {
     animation: pulse-green 2s infinite;
     border-color: var(--p4-color) !important;
     background: var(--p4-color);
+}
+
+/* Map Selection */
+.map-modal-content {
+    max-width: 800px;
+    width: 90%;
+}
+
+.map-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+.map-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.map-card:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-2px);
+    border-color: var(--color-accent);
+}
+
+.map-card.active {
+    background: rgba(74, 222, 128, 0.1);
+    border-color: #4ade80;
+    box-shadow: 0 4px 20px rgba(74, 222, 128, 0.2);
+}
+
+.map-card i {
+    font-size: 2.5rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.map-card.active i {
+    color: #4ade80;
+}
+
+.map-card h4 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.map-card p {
+    margin: 0;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
 }

@@ -28,6 +28,66 @@ const MERGE_MAP = {
     'spearman+spearman': 'baron', 'peasant+knight': 'baron', 'knight+peasant': 'baron'
 };
 
+const MAP_DEFINITIONS = {
+    random: { name: "Random Blob", icon: "fa-dice", desc: "Classic procedurally generated island.", type: 'random', size: 7 },
+    big_hex: { name: "Big Hex", icon: "fa-vector-square", desc: "A perfectly symmetrical large hexagon.", type: 'hex', size: 9 },
+    small_hex: { name: "Small Hex", icon: "fa-cube", desc: "A tighter, quicker skirmish map.", type: 'hex', size: 5 },
+    gb: {
+        name: "Great Britain", icon: "fa-mug-hot", desc: "The British Isles.", type: 'ascii',
+        data: [
+            "      XX   ",
+            "    XXXXXX ",
+            "    XXXXXX ",
+            "     XXXX  ",
+            "     XXX   ",
+            "    XXXX   ",
+            "   XXXXX   ",
+            "   XXXX    ",
+            "  XXXXX    ",
+            " XXXXXX    ",
+            " XXXXX     ",
+            "XXXXX      ",
+            "XXXX       ",
+            "XXX        "
+        ]
+    },
+    westeros: {
+        name: "Westeros", icon: "fa-dragon", desc: "The Seven Kingdoms.", type: 'ascii',
+        data: [
+            "   XXXX   ",
+            "  XXXXXX  ",
+            "  XXXXXX  ",
+            "   XXXX   ",
+            "    XX    ",
+            "   XXXX   ",
+            "  XXXXXX  ",
+            "  XXXXXXX ",
+            " XXXXXXXX ",
+            " XXXXXXX  ",
+            "  XXXXX   ",
+            "   XXX    ",
+            "  XXXX    ",
+            " XXXXXX   ",
+            " XXXXXXX  ",
+            "XXXXXXXXX "
+        ]
+    },
+    earth: {
+        name: "Earth", icon: "fa-globe-americas", desc: "A rough approximation of the world.", type: 'ascii',
+        data: [
+            "  XX      XXXXXXXXXX   ",
+            " XXXXX   XXXXXXXXXXX   ",
+            "XXXXXX   XXXXXX XXXX   ",
+            " XXXXX    XXXX  XXXX   ",
+            "  XXX     XXXX   XXX   ",
+            "   XX     XXXX    XX  X",
+            "   XX      XXX    XX XX",
+            "          XXXX         ",
+            "          XXXX         "
+        ]
+    }
+};
+
 class Hex {
     constructor(q, r) { this.q = q; this.r = r; }
     get s() { return -this.q - this.r; }
@@ -67,9 +127,10 @@ class Territory {
 
 const state = {
     grid: new Map(), players: [], currentPlayerIdx: 0,
-    camera: { x: 0, y: 0 }, territories: new Map(),
+    camera: { x: 0, y: 0, zoom: 1, isDragging: false, startX: 0, startY: 0 }, territories: new Map(),
     selectedCell: null, activeTerritoryId: null, shopSelected: null,
-    turn: 1, gameStarted: false, gameOver: false
+    turn: 1, gameStarted: false, gameOver: false,
+    validTargets: new Set()
 };
 
 // --- Initialization & Setup ---
@@ -87,9 +148,48 @@ function setup() {
         if (humanCount > totalCount) { alert("Humans cannot exceed total players!"); return; }
         startGame(humanCount, totalCount);
     });
+
+
+    setupMapSelection();
+}
+
+function setupMapSelection() {
+    const btn = document.getElementById('select-map-btn');
+    const modal = document.getElementById('map-modal');
+    const close = document.getElementById('close-map-modal');
+    const list = document.getElementById('map-list');
+    const selectedName = document.getElementById('selected-map-name');
+    const selectedInput = document.getElementById('selected-map-id');
+
+    btn.addEventListener('click', () => {
+        // Populate list
+        list.innerHTML = '';
+        Object.entries(MAP_DEFINITIONS).forEach(([key, map]) => {
+            const card = document.createElement('div');
+            card.className = `map-card ${selectedInput.value === key ? 'active' : ''}`;
+            card.innerHTML = `
+                <i class="fas ${map.icon}"></i>
+                <h4>${map.name}</h4>
+                <p>${map.desc}</p>
+            `;
+            card.addEventListener('click', () => {
+                selectedInput.value = key;
+                selectedName.textContent = map.name;
+                modal.classList.add('hidden');
+                document.querySelectorAll('.map-card').forEach(c => c.classList.remove('active'));
+                card.classList.add('active');
+            });
+            list.appendChild(card);
+        });
+        modal.classList.remove('hidden');
+    });
+
+    close.addEventListener('click', () => modal.classList.add('hidden'));
+    window.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
 }
 
 function startGame(humans, total) {
+    const mapId = document.getElementById('selected-map-id').value || 'random';
     state.players = [];
     for (let i = 1; i <= total; i++) state.players.push({ id: i, type: i <= humans ? 'human' : 'ai' });
     document.getElementById('setup-screen').classList.add('hidden');
@@ -98,7 +198,10 @@ function startGame(humans, total) {
     // Initial Resize to set correct dimensions including DPI
     handleResize();
 
-    generateIsland(total);
+    // Initial Resize to set correct dimensions including DPI
+    handleResize();
+
+    generateIsland(total, mapId);
     refreshTerritories();
     centerCamera();
     setupGameEvents();
@@ -139,9 +242,13 @@ function initLeaderboard() {
 function setupGameEvents() {
     window.addEventListener('resize', handleResize);
     document.getElementById('end-turn-btn').addEventListener('click', endTurn);
+
+    // Mouse Events for Pan/Zoom
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
     canvas.addEventListener('mousedown', handleMouseDown);
-    // ... rest of events
-    canvas.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
     // ... rest of events
     const modal = document.getElementById('help-modal');
     const gameOverModal = document.getElementById('game-over-modal');
@@ -180,6 +287,7 @@ function setupGameEvents() {
                 cursorFollower.style.left = `${e.clientX}px`;
                 cursorFollower.style.top = `${e.clientY}px`;
 
+                updateValidTargets();
                 logEvent(`Selected ${state.shopSelected}. Click your territory to place.`);
             }
         });
@@ -188,6 +296,7 @@ function setupGameEvents() {
 
 function resetShopSelection() {
     state.shopSelected = null;
+    state.validTargets.clear();
     document.querySelectorAll('.shop-item').forEach(b => b.classList.remove('selected'));
     document.getElementById('cursor-follower').style.display = 'none';
 }
@@ -210,13 +319,19 @@ function handleResize() {
     render();
 }
 
-function generateIsland(totalPlayers) {
-    const size = 7;
-    const allHexes = [];
-    for (let q = -size; q <= size; q++) {
-        for (let r = -size; r <= size; r++) {
-            if (Math.abs(q + r) <= size) allHexes.push(new Hex(q, r));
+function generateIsland(totalPlayers, mapType = 'random') {
+    let allHexes = [];
+    const config = MAP_DEFINITIONS[mapType] || MAP_DEFINITIONS.random;
+
+    if (config.type === 'hex' || config.type === 'random') {
+        const size = config.size;
+        for (let q = -size; q <= size; q++) {
+            for (let r = -size; r <= size; r++) {
+                if (Math.abs(q + r) <= size) allHexes.push(new Hex(q, r));
+            }
         }
+    } else if (config.type === 'ascii') {
+        allHexes = parseAsciiMap(config.data);
     }
 
     // 1. Calculate fair quotas
@@ -254,6 +369,66 @@ function generateIsland(totalPlayers) {
             state.grid.set(hex.toString(), cell);
         }
     });
+}
+
+
+function parseAsciiMap(lines) {
+    // Basic "pointy top" hex layout from ASCII chart
+    // Offset coordinates to Axial
+    // Using "odd-r" offset equivalent logic or just direct mapping
+    // To keep it simple: We treat (col, row) -> convert to axial
+    // Hex grid (pointy):
+    // Row 0:  0,0  1,0  2,0
+    // Row 1: 0,1  1,1  2,1  (Offset by 0.5 width)
+
+    // We can map X,Y in text directly to axial q,r with shift
+    // q = x - (y - (y&1)) / 2
+    // r = y
+
+    // ASCII map assumptions: " X " pattern.
+    // We simply iterate. If char is 'X', we add a hex.
+    // We need to center it afterwards.
+
+    const hexes = [];
+    const height = lines.length;
+    const width = lines[0].length;
+
+    let centerX = width / 2;
+    let centerY = height / 2;
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < lines[y].length; x++) {
+            if (lines[y][x] === 'X') {
+                // Convert Offset (Odd-Q likely in ASCII visual?)
+                // Let's rely on standard axial conversion for specific visual layout
+                // Actually, simpler: Treat Y as R. Treat X as Q + shifted R.
+                // r = y - centerY
+                // q = x - centerX - (y - centerY)/2
+
+                // Let's just use raw coordinates and center later.
+                // Doubled coordinates might be easier for ASCII visual 'X X X'
+                // Let's assume standard dense text block 'XXXX'
+                // q = x - (y - (y&1)) / 2
+                // r = y
+
+                let q = x - Math.floor(y / 2);
+                let r = y;
+
+                hexes.push(new Hex(q, r));
+            }
+        }
+    }
+
+    // Recentering
+    if (hexes.length > 0) {
+        let avgQ = 0, avgR = 0;
+        hexes.forEach(h => { avgQ += h.q; avgR += h.r; });
+        avgQ = Math.round(avgQ / hexes.length);
+        avgR = Math.round(avgR / hexes.length);
+
+        return hexes.map(h => new Hex(h.q - avgQ, h.r - avgR));
+    }
+    return hexes;
 }
 
 // --- Territory Logic ---
@@ -414,12 +589,98 @@ function refreshTerritories() {
 }
 
 // --- Interaction Logic ---
+function handleWheel(e) {
+    if (state.gameOver) return;
+    e.preventDefault();
+    const zoomSensitivity = 0.001;
+    const oldZoom = state.camera.zoom;
+    let newZoom = oldZoom - e.deltaY * zoomSensitivity;
+
+    // Clamp zoom
+    newZoom = Math.max(0.3, Math.min(newZoom, 3));
+
+    // Zoom towards mouse pointer
+    // Get mouse pos relative to canvas center
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left - canvas.width / 2;
+    const mouseY = e.clientY - rect.top - canvas.height / 2;
+
+    // Calculate offset in world space based on "screen = (world * zoom) + pan"
+    // So world = (screen - pan) / zoom
+    // We want the world point under mouse to stay stationary relative to screen
+    // screenX = (worldX * newZoom) + newPanX
+    // screenX = (worldX * oldZoom) + oldPanX
+    // newPanX = screenX - worldX * newZoom
+
+    // But our render is: ctx.translate(center); ctx.translate(cam); ctx.scale(zoom);
+    // screen = center + pan + (world * zoom)
+    // world * zoom = screen - center - pan
+    // world = (screen - center - pan) / zoom
+
+    const worldX = (mouseX - state.camera.x) / oldZoom;
+    const worldY = (mouseY - state.camera.y) / oldZoom;
+
+    state.camera.x = mouseX - worldX * newZoom;
+    state.camera.y = mouseY - worldY * newZoom;
+
+    state.camera.zoom = newZoom;
+}
+
 function handleMouseDown(e) {
     if (state.gameOver || state.players[state.currentPlayerIdx].type !== 'human') return;
+
+    // Identify if clicking UI or Map
+    state.camera.isDragging = true;
+    state.camera.startX = e.clientX;
+    state.camera.startY = e.clientY;
+    state.camera.initialCamX = state.camera.x;
+    state.camera.initialCamY = state.camera.y;
+    state.camera.hasDragged = false;
+}
+
+function handleMouseMove(e) {
+    if (state.camera.isDragging) {
+        const dx = e.clientX - state.camera.startX;
+        const dy = e.clientY - state.camera.startY;
+
+        // Threshold to consider it a drag
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+            state.camera.hasDragged = true;
+        }
+
+        state.camera.x = state.camera.initialCamX + dx;
+        state.camera.y = state.camera.initialCamY + dy;
+    }
+}
+
+function handleMouseUp(e) {
+    if (!state.camera.isDragging) return;
+    state.camera.isDragging = false;
+
+    // If we dragged, don't treat this as a click
+    if (state.camera.hasDragged) return;
+
+    // Otherwise, process as click logic
+    processGameClick(e);
+}
+
+function processGameClick(e) {
     const rect = canvas.getBoundingClientRect();
     const hex = pixelToHex(e.clientX - rect.left, e.clientY - rect.top);
     const cell = state.grid.get(hex.toString());
-    if (!cell) return;
+
+    // Clicking outside map
+    if (!cell) {
+        if (state.shopSelected) resetShopSelection();
+        if (state.selectedCell) {
+            state.selectedCell = null;
+            state.validTargets.clear();
+            const cursorFollower = document.getElementById('cursor-follower');
+            if (cursorFollower) cursorFollower.style.display = 'none';
+            updateUI();
+        }
+        return;
+    }
 
     const pIdx = state.players[state.currentPlayerIdx].id;
 
@@ -442,62 +703,45 @@ function handleMouseDown(e) {
         const isInternal = cell.territoryId === t.id;
         const isAdjacent = !isInternal && t.cells.some(ownCell => Hex.directions.some(d => ownCell.hex.add(d).toString() === cell.hex.toString()));
 
-        const unitType = state.shopSelected;
-        if (unitType !== 'castle') { // Buying a Unit (Peasant, Spear, Knight, Baron)
-            const cost = UNIT_COSTS[unitType];
-            if (isInternal) {
-                if (cell.unit) {
-                    // Merging Logic (Active Unit + Existing Unit)
-                    // Note: Order in MERGE_MAP keys matters if not symmetric.
-                    // We check both orderings or assume symmetric keys exist.
-                    // Existing keys are: 'peasant+peasant', 'peasant+spearman', 'spearman+peasant', etc.
-
-                    let combo = `${unitType}+${cell.unit}`;
-                    // Try reverse if not found? MERGE_MAP seems to cover permutations for relevant ones.
-
-                    if (MERGE_MAP[combo]) {
-                        cell.unit = MERGE_MAP[combo];
-                        // Do NOT set hasMoved = true. Upgraded unit keeps its turn.
+        if (canPlaceShopUnit(t, cell, state.shopSelected, isInternal, isAdjacent)) {
+            const unitType = state.shopSelected;
+            if (unitType !== 'castle') { // Buying a Unit
+                const cost = UNIT_COSTS[unitType];
+                if (isInternal) {
+                    if (cell.unit) {
+                        // Merging
+                        let combo = `${unitType}+${cell.unit}`;
+                        if (MERGE_MAP[combo]) {
+                            cell.unit = MERGE_MAP[combo];
+                            // Do NOT set hasMoved = true logic handled in place
+                            const oldBal = t.money;
+                            t.money -= cost; resetShopSelection();
+                            logEvent(`Upgraded to ${cell.unit}: ${oldBal} - ${cost} = ${t.money}`, "system");
+                        }
+                    } else if (!cell.building) {
+                        if (cell.tree) { cell.tree = null; cell.hasMoved = true; logEvent("Tree chopped!", "system"); }
                         const oldBal = t.money;
-                        t.money -= cost; resetShopSelection();
-                        logEvent(`Upgraded to ${cell.unit}: ${oldBal} - ${cost} = ${t.money}`, "system");
-                    } else {
-                        logEvent(`Cannot merge ${unitType} with ${cell.unit}.`, "system");
+                        cell.unit = unitType; t.money -= cost; resetShopSelection();
+                        logEvent(`${unitType} bought: ${oldBal} - ${cost} = ${t.money} remaining`, "system");
                     }
-                } else if (!cell.building) {
-                    if (cell.tree) { cell.tree = null; cell.hasMoved = true; logEvent("Tree chopped!", "system"); }
-                    const oldBal = t.money;
-                    cell.unit = unitType; t.money -= cost; resetShopSelection();
-                    logEvent(`${unitType} bought: ${oldBal} - ${cost} = ${t.money} remaining`, "system");
-                } else {
-                    logEvent("Cannot place unit on a building.", "system");
-                }
-            } else if (isAdjacent && cell.playerId !== pIdx) {
-                if (checkAttack(STRENGTHS[unitType], cell)) {
+                } else if (isAdjacent) {
+                    // Attack
                     const oldBal = t.money;
                     t.money -= cost; // Deduct BEFORE capture
                     captureTile(cell, pIdx, unitType);
                     resetShopSelection();
                     logEvent(`${unitType} captured tile: ${oldBal} - ${cost} = ${t.money} remaining`, "system");
-                } else {
-                    logEvent(`Enemy defense too strong for a ${unitType}.`, "system");
                 }
-            } else if (!isInternal && !isAdjacent) {
-                logEvent("Can only place units inside territory or on adjacent enemies.", "system");
+            } else if (unitType === 'castle') {
+                const oldBal = t.money;
+                cell.building = 'castle'; t.money -= 15; resetShopSelection();
+                logEvent(`Castle built: ${oldBal} - 15 = ${t.money} remaining`, "system");
             }
-        } else if (state.shopSelected === 'castle') {
-            if (isInternal) {
-                if (!cell.unit && !cell.building && !cell.tree) {
-                    const oldBal = t.money;
-                    cell.building = 'castle'; t.money -= 15; resetShopSelection();
-                    logEvent(`Castle built: ${oldBal} - 15 = ${t.money} remaining`, "system");
-                } else {
-                    logEvent("Tile must be empty to build a Castle.", "system");
-                }
-            } else {
-                // Invalid move (too far, etc)
-                logEvent("Invalid move.", "system");
-            }
+        } else {
+            // Basic error logging if invalid click happen (though visuals should guide now)
+            if (state.shopSelected === 'castle' && !isInternal) logEvent("Invalid move.", "system");
+            else if (state.shopSelected !== 'castle' && !isInternal && !isAdjacent) logEvent("Can only place units inside territory or on adjacent enemies.", "system");
+            else logEvent("Invalid placement.", "system");
         }
     } else if (state.selectedCell) {
         // Selected a different cell (switch selection or deselect)
@@ -532,12 +776,14 @@ function handleMouseDown(e) {
             }
 
             state.selectedCell = null; // Clear selection
+            state.validTargets.clear();
             const cursorFollower = document.getElementById('cursor-follower');
             if (cursorFollower) cursorFollower.style.display = 'none';
         }
     } else {
         if (cell.unit && cell.playerId === pIdx && !cell.hasMoved) {
             state.selectedCell = cell; state.shopSelected = null;
+            updateValidTargets();
             logEvent(`${cell.unit} selected. Click adjacent tile to move/attack.`);
 
             // Show cursor follower for drag
@@ -557,10 +803,13 @@ function handleMouseDown(e) {
                 if (cursorFollower) cursorFollower.style.display = 'none';
             }
             state.selectedCell = null; state.shopSelected = null;
+            state.validTargets.clear();
         }
     }
     state.activeTerritoryId = cell.territoryId; updateUI();
 }
+
+
 
 function checkAttack(strength, to) {
     let defense = to.getStrength();
@@ -604,6 +853,58 @@ function canMoveUnit(from, to) {
 
     if (from.playerId !== to.playerId) return checkAttack(STRENGTHS[from.unit], to);
     return true; // Adjacent friendly blob
+}
+
+function canPlaceShopUnit(t, cell, unitType, isInternal, isAdjacent) {
+    if (unitType === 'castle') {
+        return isInternal && !cell.unit && !cell.building && !cell.tree;
+    } else {
+        if (isInternal) {
+            if (cell.unit) {
+                // Check merge
+                const combo = `${unitType}+${cell.unit}`;
+                return !!MERGE_MAP[combo];
+            }
+            if (cell.building) return false;
+            // Can chop tree or place on empty
+            return true;
+        } else if (isAdjacent) {
+            if (cell.playerId === t.playerId) return false; // Cannot attack own other territory directly without connection? Rules say 'adjacent enemy'.
+            return checkAttack(STRENGTHS[unitType], cell);
+        }
+    }
+    return false;
+}
+
+function updateValidTargets() {
+    state.validTargets.clear();
+    const pId = state.players[state.currentPlayerIdx].id;
+
+    if (state.shopSelected && state.activeTerritoryId) {
+        const t = state.territories.get(state.activeTerritoryId);
+        if (!t || t.playerId !== pId) return; // Should be handled by UI disabling but extra safety
+
+        state.grid.forEach(cell => {
+            const isInternal = cell.territoryId === t.id;
+            // Opt: Only check relevant cells (neighbors of territory)
+            // simplified: check all
+            let isAdjacent = false;
+            if (!isInternal) {
+                isAdjacent = t.cells.some(ownCell => Hex.directions.some(d => ownCell.hex.add(d).toString() === cell.hex.toString()));
+            }
+
+            if (canPlaceShopUnit(t, cell, state.shopSelected, isInternal, isAdjacent)) {
+                state.validTargets.add(cell.hex.toString());
+            }
+        });
+
+    } else if (state.selectedCell) {
+        state.grid.forEach(cell => {
+            if (canMoveUnit(state.selectedCell, cell)) {
+                state.validTargets.add(cell.hex.toString());
+            }
+        });
+    }
 }
 
 function executeMove(from, to) {
@@ -875,14 +1176,53 @@ function drawHex(ctx, x, y, size, cell) {
     }
     if (cell.tree) drawIcon(ctx, x, y, cell.tree === 'pine' ? '🌲' : '🌴');
     if (cell.isGravestone) drawIcon(ctx, x, y, '🪦');
+
+    // Draw Valid Target Highlight
+    if (state.validTargets.has(cell.hex.toString())) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.beginPath();
+        ctx.arc(x, y, size * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
 }
 
 function drawIcon(ctx, x, y, emoji) { ctx.font = '16px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(emoji, x, y); }
 function drawPulse(ctx, x, y) { ctx.fillStyle = 'rgba(255, 0, 0, 0.6)'; ctx.beginPath(); ctx.arc(x, y + 10, 4, 0, Math.PI * 2); ctx.fill(); }
 
 function pixelToHex(x, y) {
-    const q = (2 / 3 * (x - state.camera.x)) / HEX_SIZE;
-    const r = (-1 / 3 * (x - state.camera.x) + Math.sqrt(3) / 3 * (y - state.camera.y)) / HEX_SIZE;
+    const rect = canvas.getBoundingClientRect(); // Local coord already likely passed in? 
+    // Wait, caller passes (clientX - rect.left, clientY - rect.top).
+    // So 'x' and 'y' are canvas-relative coordinates.
+
+    // Apply Camera Transform:
+    // Screen = (World * Zoom) + Pan
+    // World = (Screen - Pan) / Zoom
+
+    // The render transform is: translate(camX, camY) -> scale(zoom)
+    // Actually scale usually happens around origin?
+    // In render():
+    // ctx.translate(state.camera.x + width/2, state.camera.y + height/2); // Center of screen?
+    // Default render was: ctx.translate(state.camera.x, state.camera.y);
+
+    // We need to match render transformation.
+    // Let's standardize render to be centered properly.
+
+    const centeredX = x - canvas.width / 2;
+    const centeredY = y - canvas.height / 2;
+
+    const worldX = (centeredX - state.camera.x) / state.camera.zoom;
+    const worldY = (centeredY - state.camera.y) / state.camera.zoom;
+
+    // Hex to Pixel (flat/pointy):
+    // x = size * 3/2 * q
+    // y = size * sqrt(3) * (r + q/2)
+
+    const q = (2 / 3 * worldX) / (HEX_SIZE);
+    const r = (-1 / 3 * worldX + Math.sqrt(3) / 3 * worldY) / (HEX_SIZE);
+
     let rx = Math.round(q), rz = Math.round(r), ry = Math.round(-q - r);
     if (Math.abs(rx - q) > Math.abs(ry - (-q - r)) && Math.abs(rx - q) > Math.abs(rz - r)) rx = -ry - rz;
     else if (Math.abs(ry - (-q - r)) > Math.abs(rz - r)) ry = -rx - rz;
@@ -891,14 +1231,35 @@ function pixelToHex(x, y) {
 }
 
 function centerCamera() {
-    state.camera.x = canvas.parentElement.offsetWidth / 2;
-    state.camera.y = canvas.parentElement.offsetHeight / 2;
+    // Center of screen
+    // We want world (0,0) to be at screen center
+    // Screen = (World * Zoom) + Pan
+    // If World=0, Screen = Pan
+    // So Pan = ScreenCenter (0,0 relative to center translate)
+    state.camera.x = 0;
+    state.camera.y = 0;
+    state.camera.zoom = 1;
 }
+
 function render() {
     if (!state.gameStarted) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.save(); ctx.translate(state.camera.x, state.camera.y);
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+
+    // Move to center of canvas
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+
+    // Apply Pan
+    ctx.translate(state.camera.x, state.camera.y);
+
+    // Apply Zoom
+    ctx.scale(state.camera.zoom, state.camera.zoom);
+
     state.grid.forEach(cell => { const pos = cell.hex.toPixel(); drawHex(ctx, pos.x, pos.y, HEX_SIZE - 1, cell); });
-    ctx.restore(); requestAnimationFrame(render);
+
+    ctx.restore();
+    requestAnimationFrame(render);
 }
 
 setup();

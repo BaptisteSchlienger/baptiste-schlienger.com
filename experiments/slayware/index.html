@@ -38,7 +38,27 @@
                     </div>
                 </div>
 
+                <div class="form-group">
+                    <label>Map Type</label>
+                    <button id="select-map-btn" class="secondary-btn wide">
+                        <i class="fas fa-map"></i> <span id="selected-map-name">Random</span>
+                    </button>
+                    <!-- Hidden input to store selection -->
+                    <input type="hidden" id="selected-map-id" value="random">
+                </div>
+
                 <button id="start-game-btn" class="primary-btn wide">Start Conquest</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Map Selection Modal -->
+    <div id="map-modal" class="modal glass hidden">
+        <div class="modal-content map-modal-content">
+            <span class="close-modal" id="close-map-modal">&times;</span>
+            <h2>Select Map</h2>
+            <div class="map-grid" id="map-list">
+                <!-- Populated by JS -->
             </div>
         </div>
     </div>
