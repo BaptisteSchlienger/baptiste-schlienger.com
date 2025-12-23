@@ -20,6 +20,47 @@ const PLAYER_COLORS = {
     6: { border: '#7c2d12', fill: '#fb923c', name: 'Orange', bg: '#7c2d12' }
 };
 
+// --- Perlin Noise Implementation (Simplified) ---
+const PERLIN_YWRAPB = 4; const PERLIN_YWRAP = 1 << PERLIN_YWRAPB;
+const PERLIN_ZWRAPB = 8; const PERLIN_ZWRAP = 1 << PERLIN_ZWRAPB;
+const PERLIN_SIZE = 4095;
+let perlin_xi, perlin_yi, perlin_zi, perlin_xf, perlin_yf, perlin_zf;
+let perlin_p = new Array(PERLIN_SIZE + 1).fill(0).map(() => Math.random());
+let perlin_per = new Array(PERLIN_SIZE + 1);
+for (let i = 0; i < PERLIN_SIZE + 1; i++) perlin_per[i] = Math.floor(Math.random() * 256);
+
+function noise(x, y, z) {
+    if (y == null) y = 0; if (z == null) z = 0;
+    x = Math.abs(x); y = Math.abs(y); z = Math.abs(z);
+    perlin_xi = Math.floor(x); perlin_yi = Math.floor(y); perlin_zi = Math.floor(z);
+    perlin_xf = x - perlin_xi; perlin_yf = y - perlin_yi; perlin_zf = z - perlin_zi;
+    let rxf, ryf;
+    let r = 0, ampl = 0.5, n1, n2, n3;
+    for (let o = 0; o < 2; o++) {
+        let of = perlin_xi + (perlin_yi << PERLIN_YWRAPB) + (perlin_zi << PERLIN_ZWRAPB);
+        rxf = perlin_xf; ryf = perlin_yf;
+        n1 = perlin_per[of & PERLIN_SIZE];
+        n1 += rxf * (perlin_per[(of + 1) & PERLIN_SIZE] - n1);
+        n2 = perlin_per[(of + PERLIN_YWRAP) & PERLIN_SIZE];
+        n2 += rxf * (perlin_per[(of + PERLIN_YWRAP + 1) & PERLIN_SIZE] - n2);
+        n1 += ryf * (n2 - n1);
+        of += PERLIN_ZWRAP;
+        n2 = perlin_per[of & PERLIN_SIZE];
+        n2 += rxf * (perlin_per[(of + 1) & PERLIN_SIZE] - n2);
+        n3 = perlin_per[(of + PERLIN_YWRAP) & PERLIN_SIZE];
+        n3 += rxf * (perlin_per[(of + PERLIN_YWRAP + 1) & PERLIN_SIZE] - n3);
+        n2 += ryf * (n3 - n2);
+        r += n1 + perlin_zf * (n2 - n1);
+        ampl *= 0.5;
+        perlin_xi <<= 1; perlin_xf *= 2; perlin_yi <<= 1; perlin_yf *= 2; perlin_zi <<= 1; perlin_zf *= 2;
+        if (perlin_xf >= 1.0) { perlin_xi++; perlin_xf--; }
+        if (perlin_yf >= 1.0) { perlin_yi++; perlin_yf--; }
+        if (perlin_zf >= 1.0) { perlin_zi++; perlin_zf--; }
+    }
+    return r;
+}
+
+
 const UNIT_COSTS = { peasant: 10, spearman: 20, knight: 30, baron: 40, castle: 15 };
 const WAGES = { peasant: 2, spearman: 6, knight: 18, baron: 54 };
 const STRENGTHS = { peasant: 1, spearman: 2, knight: 3, baron: 4, castle: 2, capital: 1 };
@@ -50,6 +91,7 @@ class Hex {
     constructor(q, r) { this.q = q; this.r = r; }
     get s() { return -this.q - this.r; }
     add(other) { return new Hex(this.q + other.q, this.r + other.r); }
+    scale(k) { return new Hex(this.q * k, this.r * k); }
     toString() { return `${this.q},${this.r}`; }
     static directions = [new Hex(1, 0), new Hex(1, -1), new Hex(0, -1), new Hex(-1, 0), new Hex(-1, 1), new Hex(0, 1)];
     toPixel() {
@@ -88,7 +130,9 @@ const state = {
     camera: { x: 0, y: 0, zoom: 1, isDragging: false, startX: 0, startY: 0 }, territories: new Map(),
     selectedCell: null, activeTerritoryId: null, shopSelected: null,
     turn: 1, gameStarted: false, gameOver: false,
-    validTargets: new Set()
+    validTargets: new Set(),
+    bgSprites: [],
+    waterSprite: null
 };
 
 // --- Initialization & Setup ---
@@ -161,6 +205,80 @@ function setupMapSelection() {
         modal.classList.remove('hidden');
     });
 
+
+
+    // Initial Load of Textures (Players + Background + Water)
+    const playerTextures = 6;
+    const bgTextures = ['bg_tile_1.png', 'bg_tile_2.png', 'bg_tile_3.png'];
+
+    const totalTextures = playerTextures + bgTextures.length + 3 + playerTextures + 1 + playerTextures; // +1 water, +1 tree, +1 cap, +6 cap_p, +1 castle, +6 castle_p
+    let loadedCount = 0;
+    state.playerSprites = {};
+
+    const checkLoad = () => {
+        loadedCount++;
+        if (loadedCount === totalTextures) render();
+    };
+
+    const waterImg = new Image();
+    waterImg.src = 'assets/water_tile.png';
+    waterImg.onload = () => { state.waterSprite = waterImg; checkLoad(); };
+    waterImg.onerror = checkLoad; // Proceed even if fails
+
+    // Load Tree (User provided)
+    const treeImg = new Image();
+    treeImg.src = 'assets/tree.png';
+    treeImg.onload = () => { state.treeSprite = treeImg; checkLoad(); };
+    treeImg.onerror = checkLoad;
+
+    // Load Capital (Default)
+    const capitalImg = new Image();
+    capitalImg.src = 'assets/capital.png';
+    capitalImg.onload = () => { state.capitalSprite = capitalImg; checkLoad(); };
+    capitalImg.onerror = checkLoad;
+
+    // Load Player-Specific Capitals (Optional)
+    state.capitalSprites = {};
+    for (let i = 1; i <= playerTextures; i++) {
+        const tex = new Image();
+        tex.src = `assets/capital_${i}.png`;
+        tex.onload = () => { state.capitalSprites[i] = tex; checkLoad(); };
+        tex.onerror = checkLoad; // Count anyway so we don't hang
+    }
+
+    // Load Castle (Default)
+    const castleImg = new Image();
+    castleImg.src = 'assets/castle.png';
+    castleImg.onload = () => { state.castleSprite = castleImg; checkLoad(); };
+    castleImg.onerror = checkLoad;
+
+    // Load Player-Specific Castles
+    state.castleSprites = {};
+    for (let i = 1; i <= playerTextures; i++) {
+        const tex = new Image();
+        tex.src = `assets/castle_${i}.png`;
+        tex.onload = () => { state.castleSprites[i] = tex; checkLoad(); };
+        tex.onerror = checkLoad;
+    }
+
+
+    // Load Player Sprites
+    for (let i = 1; i <= playerTextures; i++) {
+        const tex = new Image();
+        tex.src = `assets/tile_${i}.png`;
+        tex.onload = checkLoad;
+        state.playerSprites[i] = tex;
+    }
+
+    // Load Background Sprites
+    state.bgSprites = [];
+    bgTextures.forEach(file => {
+        const img = new Image();
+        img.src = `assets/${file}`;
+        img.onload = checkLoad;
+        state.bgSprites.push(img);
+    });
+
     close.addEventListener('click', () => modal.classList.add('hidden'));
     window.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
 }
@@ -197,8 +315,7 @@ function initLeaderboard() {
 
         const icon = document.createElement('div');
         icon.className = 'player-icon';
-        icon.style.setProperty('--player-color', PLAYER_COLORS[p.id].fill);
-        icon.style.setProperty('--player-bg', PLAYER_COLORS[p.id].bg);
+        icon.style.backgroundImage = `url('assets/tile_${p.id}.png')`;
         icon.innerHTML = p.type === 'human' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-robot"></i>';
 
         const barContainer = document.createElement('div');
@@ -258,9 +375,20 @@ function setupGameEvents() {
                 // Update Cursor Follower
                 const cursorFollower = document.getElementById('cursor-follower');
                 cursorFollower.style.display = 'block';
-                // Map unit to icon
-                const icons = { peasant: '👨', spearman: '🛡️', knight: '🏇', baron: '👑', castle: '🏰' };
-                cursorFollower.textContent = icons[unit] || '❓';
+                cursorFollower.innerHTML = ''; // Clear previous content
+
+                if (unit === 'castle') {
+                    const pId = state.players[state.currentPlayerIdx].id;
+                    const sprite = (state.castleSprites && state.castleSprites[pId]) || state.castleSprite;
+                    if (sprite) {
+                        const img = sprite.cloneNode();
+                        img.style.width = '50px'; img.style.height = 'auto';
+                        cursorFollower.appendChild(img);
+                    } else cursorFollower.textContent = '🏰';
+                } else {
+                    const icons = { peasant: '👨', spearman: '🛡️', knight: '🏇', baron: '👑' };
+                    cursorFollower.textContent = icons[unit] || '❓';
+                }
                 // Initial position
                 cursorFollower.style.left = `${e.clientX}px`;
                 cursorFollower.style.top = `${e.clientY}px`;
@@ -1062,6 +1190,7 @@ function restartGame() {
     state.gameStarted = false;
     state.gameOver = false;
     state.turn = 1;
+    state.currentPlayerIdx = 0;
     state.grid = new Map();
     state.players = [];
     state.territories = new Map();
@@ -1139,9 +1268,16 @@ function updateUI() {
     const btn = document.getElementById('end-turn-btn');
     if (state.players[state.currentPlayerIdx].type === 'human') {
         const hasActions = hasAvailableActions(p.id);
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+
         if (!hasActions) btn.classList.add('suggest-end-turn');
         else btn.classList.remove('suggest-end-turn');
     } else {
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+        btn.style.cursor = 'not-allowed';
         btn.classList.remove('suggest-end-turn');
     }
 
@@ -1191,31 +1327,146 @@ function logEvent(msg, type = '') {
 
 function drawHex(ctx, x, y, size, cell) {
     const color = PLAYER_COLORS[cell.playerId];
-    ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.lineTo(x + size * Math.cos(a), y + size * Math.sin(a)); }
-    ctx.closePath();
-    ctx.fillStyle = (state.selectedCell === cell) ? '#fff' : (state.activeTerritoryId === cell.territoryId && cell.playerId !== 0) ? color.fill : color.bg;
-    ctx.fill(); ctx.strokeStyle = color.fill; ctx.stroke();
+    let surfaceY = y;
+    if (state.playerSprites && state.playerSprites[cell.playerId]) {
+        // Draw Textured
+        const sprite = state.playerSprites[cell.playerId];
+        const scale = (size * 2) / sprite.width;
+        const h = sprite.height * scale;
+        const w = sprite.width * scale;
+
+        // Align bottom of sprite to bottom of hex face
+        // y is center. Bottom of hex face is y + size * sqrt(3) / 2
+        // We want (drawY + h) = y + size * sqrt(3) / 2
+        // So drawY = y + size * sqrt(3) / 2 - h
+
+        const drawX = x - w / 2;
+        const drawY = y + size * Math.sqrt(3) / 2 - h;
+
+        surfaceY = y + size * Math.sqrt(3) - h;
+
+        ctx.save();
+        // Highlight active territory (Brighten)
+        if (state.activeTerritoryId === cell.territoryId && cell.playerId !== 0) {
+            ctx.filter = 'brightness(1.5)';
+        }
+        ctx.drawImage(sprite, drawX, drawY, w, h);
+        ctx.restore();
+    } else {
+        // Fallback Flat
+        ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.lineTo(x + size * Math.cos(a), y + size * Math.sin(a)); }
+        ctx.closePath();
+        ctx.fillStyle = (state.selectedCell === cell) ? '#fff' : (state.activeTerritoryId === cell.territoryId && cell.playerId !== 0) ? color.fill : color.bg;
+        ctx.fill(); ctx.strokeStyle = color.fill; ctx.stroke();
+    }
+
+    // Selection Overlay (if textured)
+    if (state.playerSprites[cell.playerId]) {
+        if (state.selectedCell === cell) { // Highlight selection
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.lineTo(x + size * Math.cos(a), surfaceY + size * Math.sin(a)); }
+            ctx.fill();
+        } else if (state.activeTerritoryId === cell.territoryId && cell.playerId !== 0) {
+            // Active territory tint? maybe not needed if texture matches color
+        }
+    }
     if (cell.building === 'capital') {
-        drawIcon(ctx, x, y, '🏠');
+        const sprite = (state.capitalSprites && state.capitalSprites[cell.playerId]) || state.capitalSprite;
+
+        if (sprite && sprite.complete) {
+            // Scale logic: capital might be smaller than full tile? 
+            // Let's assume full tile width scaling for consistency with trees/tiles if it's high res
+            const scale = (size * 2) / sprite.width;
+            const h = sprite.height * scale;
+            const w = sprite.width * scale;
+
+            // Align bottom to bottom of hex face (same as tree/tile)
+            const drawX = x - w / 2;
+            const drawY = y + size * Math.sqrt(3) / 2 - h;
+
+            ctx.drawImage(sprite, drawX, drawY, w, h);
+        } else {
+            drawIcon(ctx, x, surfaceY, '🏠');
+        }
+
         const t = state.territories.get(cell.territoryId);
         const isCurrentPlayer = cell.playerId === state.players[state.currentPlayerIdx].id;
-        if (isCurrentPlayer && t && t.money >= 10 && Math.sin(Date.now() / 200) > 0) drawPulse(ctx, x, y);
+        if (isCurrentPlayer && t && t.money >= 10 && Math.sin(Date.now() / 200) > 0) drawPulse(ctx, x, surfaceY);
     }
-    if (cell.building === 'castle') drawIcon(ctx, x, y, '🏰');
+    if (cell.building === 'castle') {
+        const sprite = (state.castleSprites && state.castleSprites[cell.playerId]) || state.castleSprite;
+
+        if (sprite && sprite.complete) {
+            const scale = (size * 2) / sprite.width;
+            const h = sprite.height * scale;
+            const w = sprite.width * scale;
+
+            // Align bottom to bottom of hex face
+            const drawX = x - w / 2;
+            const drawY = y + size * Math.sqrt(3) / 2 - h;
+
+            ctx.drawImage(sprite, drawX, drawY, w, h);
+        } else {
+            drawIcon(ctx, x, surfaceY, '🏰');
+        }
+    }
     if (cell.unit) {
-        drawIcon(ctx, x, y, { peasant: '👨', spearman: '🛡️', knight: '🏇', baron: '👑' }[cell.unit]);
+        drawIcon(ctx, x, surfaceY, { peasant: '👨', spearman: '🛡️', knight: '🏇', baron: '👑' }[cell.unit]);
         const isCurrentPlayer = cell.playerId === state.players[state.currentPlayerIdx].id;
-        if (cell.hasMoved) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.arc(x, y, size / 2, 0, Math.PI * 2); ctx.fill(); }
-        else if (isCurrentPlayer && Math.sin(Date.now() / 200) > 0) drawPulse(ctx, x, y);
+        if (cell.hasMoved) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.arc(x, surfaceY, size / 2, 0, Math.PI * 2); ctx.fill(); }
+        else if (isCurrentPlayer && Math.sin(Date.now() / 200) > 0) drawPulse(ctx, x, surfaceY);
     }
-    if (cell.tree) drawIcon(ctx, x, y, cell.tree === 'pine' ? '🌲' : '🌴');
-    if (cell.isGravestone) drawIcon(ctx, x, y, '🪦');
+    if (cell.tree) {
+        if (state.treeSprite && state.treeSprite.complete) {
+            // Draw Tree Sprite
+            const sprite = state.treeSprite;
+            const scale = (size * 2) / sprite.width;
+            const h = sprite.height * scale;
+            const w = sprite.width * scale;
+
+            // Align bottom of tree sprite to bottom of hex face (same as tile)
+            // Use same logic as tile drawing:
+            const drawX = x - w / 2;
+            const drawY = surfaceY; // surfaceY IS (y + size*sqrt(3)/2 - tileH).
+            // Wait, surfaceY is the TOP of the tile surface.
+            // If the tree sprite is full tile height (including 3D depth), we need to align it carefully.
+            // User said: "exact same dimensions as a tile".
+            // If I draw it at the same Y as the tile, it will overlay perfectly.
+            // Tile drawY = y + size*sqrt(3)/2 - tileH.
+            // surfaceY = y + size*sqrt(3) - tileH. (Wait, I calculated this in previous step).
+
+            // Let's look at previous step calculation:
+            // const drawY = y + size * Math.sqrt(3) / 2 - h;
+            // surfaceY = y + size * Math.sqrt(3) - h;
+
+            // If I want to match the tile position exactly:
+            // I should draw it at `drawY_tile`.
+            // `drawY_tile` = surfaceY - (size * Math.sqrt(3)/2)? No.
+
+            // surfaceY = drawY + size*sqrt(3)/2.
+            // So drawY = surfaceY - size*sqrt(3)/2.
+
+            // Let's trust "same dimensions as a tile". 
+            // I should use the exact same calculation as the tile for the tree (assuming tree sprite has same H/W ratio/size as tile sprite).
+            // The tile sprite height `h` (scaled) was used to compute surfaceY.
+
+            const treeDrawY = y + size * Math.sqrt(3) / 2 - h;
+            // This assumes tree sprite has SAME aspect ratio and pixel size as the tile sprite.
+            // Scaling logic: scale = (size * 2) / sprite.width. 
+            // If dimensions are same, `w` and `h` will be same.
+
+            ctx.drawImage(sprite, drawX, treeDrawY, w, h);
+        } else {
+            drawIcon(ctx, x, surfaceY, cell.tree === 'pine' ? '🌲' : '🌴');
+        }
+    }
+    if (cell.isGravestone) drawIcon(ctx, x, surfaceY, '🪦');
 
     // Draw Valid Target Highlight
     if (state.validTargets.has(cell.hex.toString())) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
         ctx.beginPath();
-        ctx.arc(x, y, size * 0.3, 0, Math.PI * 2);
+        ctx.arc(x, surfaceY, size * 0.3, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 1;
@@ -1300,6 +1551,159 @@ function centerCamera() {
     state.camera.y = -mapCenterY * state.camera.zoom;
 }
 
+function getVisibleHexBounds() {
+    const cx = canvas.clientWidth / 2;
+    const cy = canvas.clientHeight / 2;
+
+    // Check 4 corners + center + mid-edges to be safe? 
+    // 4 corners is usually enough for convex hull of screen.
+    const corners = [
+        { x: 0, y: 0 },
+        { x: canvas.clientWidth, y: 0 },
+        { x: 0, y: canvas.clientHeight },
+        { x: canvas.clientWidth, y: canvas.clientHeight }
+    ];
+
+    let minQ = Infinity, maxQ = -Infinity, minR = Infinity, maxR = -Infinity;
+
+    corners.forEach(p => {
+        const worldX = (p.x - cx - state.camera.x) / state.camera.zoom;
+        const worldY = (p.y - cy - state.camera.y) / state.camera.zoom;
+
+        const q = (2 / 3 * worldX) / HEX_SIZE;
+        const r = (-1 / 3 * worldX + Math.sqrt(3) / 3 * worldY) / HEX_SIZE;
+
+        if (q < minQ) minQ = q;
+        if (q > maxQ) maxQ = q;
+        if (r < minR) minR = r;
+        if (r > maxR) maxR = r;
+    });
+
+    return {
+        qMin: Math.floor(minQ) - 1,
+        qMax: Math.ceil(maxQ) + 1,
+        rMin: Math.floor(minR) - 1,
+        rMax: Math.ceil(maxR) + 1
+    };
+}
+
+function drawBackground(ctx) {
+    if (state.bgSprites.length < 3) return;
+
+    const bounds = getVisibleHexBounds();
+    const size = HEX_SIZE;
+    // Use slightly larger size or overlap if needed, but standard hex size should work if math is perfect.
+    // 3D tiles usually overlap downwards.
+
+    // We iterate R then Q to draw top-to-bottom for correct Z-ordering of 3D tiles
+    for (let r = bounds.rMin; r <= bounds.rMax; r++) {
+        for (let q = bounds.qMin; q <= bounds.qMax; q++) {
+            // Deterministic random texture
+            // Large primes for hashing to avoid patterns
+            const hash = Math.abs((Math.round(q) * 492876847 ^ Math.round(r) * 715225739)) % state.bgSprites.length;
+            const sprite = state.bgSprites[hash];
+
+            if (!sprite || !sprite.complete) continue;
+
+            const x = HEX_SIZE * 3 / 2 * q;
+            const y = HEX_SIZE * Math.sqrt(3) * (r + q / 2);
+
+            // Draw logic matching drawHex but without gameplay overlays
+            const aspect = sprite.height / sprite.width;
+            const drawW = size * 2;
+            const drawH = drawW * aspect;
+
+            // Centering logic for 3D tiles:
+            // The "footprint" center is x,y.
+            // We align the bottom part of the hex to the footprint?
+            // Usually for 3D hexes:
+            // x is center.
+            // y is center of the hex top face.
+            // So we draw the image such that its "top face" aligns with x,y.
+
+            // Standard hex draw:
+            // ctx.drawImage(sprite, x - size, y - size, ...);
+            // This aligns the top-left of the BOX (2*size width, 2*size height) to x-size, y-size.
+            // If the sprite is taller, we draw it further up?
+
+            // Let's assume the sprite is drawn centered horizontally.
+            // Vertically, the "center" of the hex face should be at y.
+            // If the sprite has depth d, the image height is h + d.
+            // The "center" of the top face is at y.
+            // So we start drawing at y - h/2 - d?
+
+            // Re-using the logic that worked for player tiles (hopefully):
+            ctx.drawImage(sprite, x - size, y - size * Math.sqrt(3) / 2 - (drawH - size * Math.sqrt(3)), drawW, drawH);
+        }
+    }
+}
+
+
+
+
+function drawWater(ctx) {
+    if (!state.waterSprite || !state.waterSprite.complete) return;
+
+    const bounds = getVisibleHexBounds();
+    const size = HEX_SIZE;
+    const now = Date.now() / 1000;
+
+    // Helper to find minimal distance to land (Breadth/Ring-First Search)
+    const getLandDistance = (startHex, maxDist) => {
+        // Optimization: Check rings outward
+        for (let d = 1; d <= maxDist; d++) {
+            // Generate ring d
+            // Start point: startHex + direction[4] * d
+            let current = startHex.add(Hex.directions[4].scale(d));
+
+            for (let i = 0; i < 6; i++) {
+                const dir = Hex.directions[i];
+                for (let j = 0; j < d; j++) {
+                    if (state.grid.has(current.toString())) return d;
+                    current = current.add(dir);
+                }
+            }
+        }
+        return maxDist + 1; // Beyond max
+    };
+
+    // Iterate visible grid
+    for (let r = bounds.rMin; r <= bounds.rMax; r++) {
+        for (let q = bounds.qMin; q <= bounds.qMax; q++) {
+            const h = new Hex(q, r);
+            const hexStr = h.toString();
+
+            // Calculate opacity: 80% at dist 1, +5% each step, max 90%
+            const maxDist = 7;
+            const dist = getLandDistance(h, maxDist);
+
+            // Formula: 0.8 + (dist - 1) * 0.05
+            // Cap at 0.9
+            let alpha = 0.7 + (Math.min(dist, maxDist) - 1) * 0.05;
+            alpha = Math.min(Math.max(alpha, 0.7), 0.9);
+
+            // Perlin Bobbing
+            // Use noise(q, r, time)
+            // Lower frequency = smoother waves. Lower time scale = slower.
+            const nVal = noise(q * 0.1, r * 0.1, now * 0.5);
+            const bob = nVal * 0.07;
+
+            const sprite = state.waterSprite;
+            const aspect = sprite.height / sprite.width;
+            const drawW = size * 2;
+            const drawH = drawW * aspect;
+
+            const x = HEX_SIZE * 3 / 2 * q;
+            const y = HEX_SIZE * Math.sqrt(3) * (r + q / 2);
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(sprite, x - size, y - size * Math.sqrt(3) / 2 - (drawH - size * Math.sqrt(3)) - bob, drawW, drawH);
+            ctx.restore();
+        }
+    }
+}
+
 function render() {
     if (!state.gameStarted) return;
 
@@ -1315,13 +1719,38 @@ function render() {
     // Apply Zoom
     ctx.scale(state.camera.zoom, state.camera.zoom);
 
-    state.grid.forEach(cell => { const pos = cell.hex.toPixel(); drawHex(ctx, pos.x, pos.y, HEX_SIZE - 1, cell); });
+    // Draw Infinite Background
+    drawBackground(ctx);
+
+    // Sort background tiles if needed. For now, let's just loop r then q, or use drawBackground logic.
+    // Since drawBackground loops q then r, let's swap or sort?
+    // Actually, loop order matters for overlapping sprites.
+
+    // Draw Water Layer
+    drawWater(ctx);
+
+    // Sort cells by depth (Y coordinate) to ensure correct overlap for 3D tiles
+    const sortedCells = Array.from(state.grid.values()).sort((a, b) => {
+        const pay = Math.sqrt(3) / 2 * a.hex.q + Math.sqrt(3) * a.hex.r; // Inline simplified Y calc
+        const pby = Math.sqrt(3) / 2 * b.hex.q + Math.sqrt(3) * b.hex.r;
+        return pay - pby;
+    });
+
+    sortedCells.forEach(cell => {
+        const pos = cell.hex.toPixel();
+        drawHex(ctx, pos.x, pos.y, HEX_SIZE - 1, cell);
+    });
 
     ctx.restore();
     requestAnimationFrame(render);
 }
 
 setup();
+
+document.getElementById('recenter-btn').addEventListener('click', () => {
+    state.camera.x = 0;
+    state.camera.y = 0;
+});
 
 // Global Cursor Follower Logic
 // Global Cursor Follower Logic
