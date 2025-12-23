@@ -20,7 +20,7 @@ const PLAYER_COLORS = {
     6: { border: '#7c2d12', fill: '#fb923c', name: 'Orange', bg: '#7c2d12' }
 };
 
-const UNIT_COSTS = { peasant: 10, castle: 15 };
+const UNIT_COSTS = { peasant: 10, spearman: 20, knight: 30, baron: 40, castle: 15 };
 const WAGES = { peasant: 2, spearman: 6, knight: 18, baron: 54 };
 const STRENGTHS = { peasant: 1, spearman: 2, knight: 3, baron: 4, castle: 2, capital: 1 };
 const MERGE_MAP = {
@@ -153,13 +153,43 @@ function setupGameEvents() {
 
     document.getElementById('restart-btn').addEventListener('click', restartGame);
 
+    // Shop Button Logic
     document.querySelectorAll('.shop-item').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (e) => {
             if (state.players[state.currentPlayerIdx].type !== 'human') return;
-            state.shopSelected = btn.dataset.unit; state.selectedCell = null;
-            logEvent(`Selected ${state.shopSelected}. Click your territory to place.`);
+            const unit = btn.dataset.unit;
+
+            // Toggle logic
+            if (state.shopSelected === unit) {
+                resetShopSelection();
+                logEvent("Action canceled.");
+            } else {
+                // Select new
+                document.querySelectorAll('.shop-item').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                state.shopSelected = unit;
+                state.selectedCell = null;
+
+                // Update Cursor Follower
+                const cursorFollower = document.getElementById('cursor-follower');
+                cursorFollower.style.display = 'block';
+                // Map unit to icon
+                const icons = { peasant: '👨', spearman: '🛡️', knight: '🏇', baron: '👑', castle: '🏰' };
+                cursorFollower.textContent = icons[unit] || '❓';
+                // Initial position
+                cursorFollower.style.left = `${e.clientX}px`;
+                cursorFollower.style.top = `${e.clientY}px`;
+
+                logEvent(`Selected ${state.shopSelected}. Click your territory to place.`);
+            }
         });
     });
+}
+
+function resetShopSelection() {
+    state.shopSelected = null;
+    document.querySelectorAll('.shop-item').forEach(b => b.classList.remove('selected'));
+    document.getElementById('cursor-follower').style.display = 'none';
 }
 
 function handleResize() {
@@ -335,20 +365,40 @@ function refreshTerritories() {
 
         if (!hasExistingCapital && nt.cells.length >= 2) {
             // Spawn new capital
-            // Priority 1: Empty tile
-            let spot = nt.cells.find(c => !c.unit && !c.building && !c.tree);
-            // Priority 2: Tile with tree (clear tree)
-            if (!spot) spot = nt.cells.find(c => !c.unit && !c.building);
-            // Priority 3: Overwrite unit (last resort)
-            if (!spot) spot = nt.cells[0];
+            // Score candidates to find optimal capital spot
+            // 0: Empty (Best)
+            // 1: Tree or Gravestone
+            // 2: Castle (Expensive loss)
+            // 3: Unit (Sacrifice)
 
-            // Ensure the spot is clear for the capital
-            spot.unit = null;
-            spot.tree = null;
-            spot.building = 'capital';
+            let bestSpot = nt.cells[0];
+            let bestScore = 99;
+
+            for (const cell of nt.cells) {
+                let score = 3;
+                if (cell.unit) score = 3;
+                else if (cell.building === 'castle') score = 2;
+                else if (cell.tree || cell.isGravestone) score = 1;
+                else score = 0; // Ideally empty
+
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestSpot = cell;
+                    if (bestScore === 0) break; // Found perfect spot
+                }
+            }
+
+            // Enforce clearing of the chosen spot
+            // "Replace that entity" -> We destroy whatever was there.
+            if (bestSpot.unit) logEvent(`Capital replaced a ${bestSpot.unit}!`, "system");
+
+            bestSpot.unit = null;
+            bestSpot.tree = null;
+            bestSpot.building = 'capital';
+            bestSpot.isGravestone = false;
 
             // Clear any other capitals just in case
-            nt.cells.forEach(c => { if (c !== spot && c.building === 'capital') c.building = null; });
+            nt.cells.forEach(c => { if (c !== bestSpot && c.building === 'capital') c.building = null; });
         } else if (nt.cells.length < 2) {
             // Remove capital if shrank too small and replace with tree
             nt.cells.forEach(c => {
@@ -377,51 +427,60 @@ function handleMouseDown(e) {
         const t = state.territories.get(state.activeTerritoryId);
         if (!t || t.playerId !== pIdx) {
             logEvent("Select one of your territories first!", "system");
-            state.shopSelected = null; return;
+            resetShopSelection(); return;
         }
         const hasCapital = t.cells.some(c => c.building === 'capital');
         if (!hasCapital) {
             logEvent("This territory is too small (no capital).", "system");
-            state.shopSelected = null; return;
+            resetShopSelection(); return;
         }
         if (t.money < UNIT_COSTS[state.shopSelected]) {
             logEvent(`Not enough money (${UNIT_COSTS[state.shopSelected]}c needed).`, "system");
-            state.shopSelected = null; return;
+            resetShopSelection(); return;
         }
 
         const isInternal = cell.territoryId === t.id;
         const isAdjacent = !isInternal && t.cells.some(ownCell => Hex.directions.some(d => ownCell.hex.add(d).toString() === cell.hex.toString()));
 
-        if (state.shopSelected === 'peasant') {
+        const unitType = state.shopSelected;
+        if (unitType !== 'castle') { // Buying a Unit (Peasant, Spear, Knight, Baron)
+            const cost = UNIT_COSTS[unitType];
             if (isInternal) {
                 if (cell.unit) {
-                    const combo = `peasant+${cell.unit}`;
+                    // Merging Logic (Active Unit + Existing Unit)
+                    // Note: Order in MERGE_MAP keys matters if not symmetric.
+                    // We check both orderings or assume symmetric keys exist.
+                    // Existing keys are: 'peasant+peasant', 'peasant+spearman', 'spearman+peasant', etc.
+
+                    let combo = `${unitType}+${cell.unit}`;
+                    // Try reverse if not found? MERGE_MAP seems to cover permutations for relevant ones.
+
                     if (MERGE_MAP[combo]) {
                         cell.unit = MERGE_MAP[combo];
                         // Do NOT set hasMoved = true. Upgraded unit keeps its turn.
                         const oldBal = t.money;
-                        t.money -= 10; state.shopSelected = null;
-                        logEvent(`Upgraded to ${cell.unit}: ${oldBal} - 10 = ${t.money}`, "system");
+                        t.money -= cost; resetShopSelection();
+                        logEvent(`Upgraded to ${cell.unit}: ${oldBal} - ${cost} = ${t.money}`, "system");
                     } else {
-                        logEvent(`Cannot merge Peasant with ${cell.unit}.`, "system");
+                        logEvent(`Cannot merge ${unitType} with ${cell.unit}.`, "system");
                     }
                 } else if (!cell.building) {
                     if (cell.tree) { cell.tree = null; cell.hasMoved = true; logEvent("Tree chopped!", "system"); }
                     const oldBal = t.money;
-                    cell.unit = 'peasant'; t.money -= 10; state.shopSelected = null;
-                    logEvent(`Peasant bought: ${oldBal} - 10 = ${t.money} remaining`, "system");
+                    cell.unit = unitType; t.money -= cost; resetShopSelection();
+                    logEvent(`${unitType} bought: ${oldBal} - ${cost} = ${t.money} remaining`, "system");
                 } else {
                     logEvent("Cannot place unit on a building.", "system");
                 }
             } else if (isAdjacent && cell.playerId !== pIdx) {
-                if (checkAttack(STRENGTHS.peasant, cell)) {
+                if (checkAttack(STRENGTHS[unitType], cell)) {
                     const oldBal = t.money;
-                    t.money -= 10; // Deduct BEFORE capture triggers refreshTerritories
-                    captureTile(cell, pIdx, 'peasant');
-                    state.shopSelected = null;
-                    logEvent(`Peasant captured tile: ${oldBal} - 10 = ${t.money} remaining`, "system");
+                    t.money -= cost; // Deduct BEFORE capture
+                    captureTile(cell, pIdx, unitType);
+                    resetShopSelection();
+                    logEvent(`${unitType} captured tile: ${oldBal} - ${cost} = ${t.money} remaining`, "system");
                 } else {
-                    logEvent("Enemy defense too strong for a Peasant.", "system");
+                    logEvent(`Enemy defense too strong for a ${unitType}.`, "system");
                 }
             } else if (!isInternal && !isAdjacent) {
                 logEvent("Can only place units inside territory or on adjacent enemies.", "system");
@@ -430,19 +489,29 @@ function handleMouseDown(e) {
             if (isInternal) {
                 if (!cell.unit && !cell.building && !cell.tree) {
                     const oldBal = t.money;
-                    cell.building = 'castle'; t.money -= 15; state.shopSelected = null;
+                    cell.building = 'castle'; t.money -= 15; resetShopSelection();
                     logEvent(`Castle built: ${oldBal} - 15 = ${t.money} remaining`, "system");
                 } else {
                     logEvent("Tile must be empty to build a Castle.", "system");
                 }
             } else {
-                logEvent("Castles must be built inside your own territory.", "system");
+                // Invalid move (too far, etc)
+                logEvent("Invalid move.", "system");
             }
         }
     } else if (state.selectedCell) {
+        // Selected a different cell (switch selection or deselect)
+        // Ensure cursor is hidden from previous selection
+        const cursorFollower = document.getElementById('cursor-follower');
+        if (cursorFollower) cursorFollower.style.display = 'none';
+
         if (canMoveUnit(state.selectedCell, cell)) {
             executeMove(state.selectedCell, cell);
+            state.selectedCell = null;
+            const cursorFollower = document.getElementById('cursor-follower');
+            if (cursorFollower) cursorFollower.style.display = 'none';
         } else {
+            // Explain why movement failed
             // Explain why movement failed
             const t = state.territories.get(state.selectedCell.territoryId);
             const isAdj = t && t.cells.some(c => {
@@ -453,17 +522,42 @@ function handleMouseDown(e) {
             if (state.selectedCell.territoryId !== cell.territoryId && !isAdj) {
                 logEvent("Target is too far away!", "system");
             } else if (state.selectedCell.playerId !== cell.playerId && !checkAttack(STRENGTHS[state.selectedCell.unit], cell)) {
-                logEvent(`${state.selectedCell.unit.charAt(0).toUpperCase() + state.selectedCell.unit.slice(1)} is too weak to attack!`, "system");
+                logEvent("Enemy too strong!", "system");
             } else if (state.selectedCell.playerId === cell.playerId && cell.unit && !MERGE_MAP[`${state.selectedCell.unit}+${cell.unit}`]) {
-                logEvent(`Cannot merge ${state.selectedCell.unit} and ${cell.unit}.`, "system");
+                logEvent(`Cannot merge ${state.selectedCell.unit} with ${cell.unit}.`, "system");
+            } else if (cell.building && cell.territoryId === state.selectedCell.territoryId) {
+                logEvent("Cannot move onto infrastructure!", "system");
+            } else {
+                logEvent("Invalid move.", "system");
             }
+
+            state.selectedCell = null; // Clear selection
+            const cursorFollower = document.getElementById('cursor-follower');
+            if (cursorFollower) cursorFollower.style.display = 'none';
         }
-        state.selectedCell = null;
     } else {
-        if (cell.playerId === pIdx && cell.unit && cell.hasMoved) {
-            logEvent("This unit has already moved this turn.", "system");
+        if (cell.unit && cell.playerId === pIdx && !cell.hasMoved) {
+            state.selectedCell = cell; state.shopSelected = null;
+            logEvent(`${cell.unit} selected. Click adjacent tile to move/attack.`);
+
+            // Show cursor follower for drag
+            const cursorFollower = document.getElementById('cursor-follower');
+            if (cursorFollower) {
+                cursorFollower.style.display = 'block';
+                const icons = { peasant: '👨', spearman: '🛡️', knight: '🏇', baron: '👑' };
+                cursorFollower.textContent = icons[cell.unit] || '❓';
+                // Snap to mouse immediately if possible, or wait for move
+                cursorFollower.style.left = `${e.clientX}px`;
+                cursorFollower.style.top = `${e.clientY}px`;
+            }
+        } else {
+            if (state.selectedCell) {
+                // Deselecting
+                const cursorFollower = document.getElementById('cursor-follower');
+                if (cursorFollower) cursorFollower.style.display = 'none';
+            }
+            state.selectedCell = null; state.shopSelected = null;
         }
-        state.selectedCell = (cell.playerId === pIdx && cell.unit && !cell.hasMoved) ? cell : null;
     }
     state.activeTerritoryId = cell.territoryId; updateUI();
 }
@@ -573,21 +667,25 @@ function startTurn() {
 }
 
 
+function hasAvailableActions(playerId) {
+    // 1. Check for unmoved units
+    const hasUnmovedUnits = Array.from(state.grid.values()).some(c => c.playerId === playerId && c.unit && !c.hasMoved);
+    if (hasUnmovedUnits) return true;
+
+    // 2. Check for ability to buy units (Capital exists + Money >= 10)
+    // We check purely for capacity to spend, not board space (as space is almost always available if you have land)
+    const hasMoneyToSpend = Array.from(state.territories.values())
+        .filter(t => t.playerId === playerId)
+        .some(t => t.cells.some(c => c.building === 'capital') && t.money >= 10);
+
+    return hasMoneyToSpend;
+}
+
 function endTurn() {
     const pId = state.players[state.currentPlayerIdx].id;
     if (state.players[state.currentPlayerIdx].type === 'human') {
-        const hasUnmovedUnits = Array.from(state.grid.values()).some(c => c.playerId === pId && c.unit && !c.hasMoved);
-        // Check if any territory has capital AND money >= 10 (can buy unit)
-        const hasMoneyToSpend = Array.from(state.territories.values())
-            .filter(t => t.playerId === pId)
-            .some(t => t.cells.some(c => c.building === 'capital') && t.money >= 10);
-
-        if (hasUnmovedUnits || hasMoneyToSpend) {
-            const warning = hasUnmovedUnits && hasMoneyToSpend ?
-                "You still have units to move and funds to spend!" :
-                (hasUnmovedUnits ? "You still have units ready to move!" : "You still have treasury funds to spend!");
-
-            if (!confirm(`${warning}\nAre you sure you want to end your turn?`)) return;
+        if (hasAvailableActions(pId)) {
+            if (!confirm("You still have actions available (Units to move or Money to spend).\nAre you sure you want to end your turn?")) return;
         }
     }
 
@@ -671,9 +769,6 @@ function runAITurn() {
 // --- Rendering & UI ---
 function updateUI() {
     const p = state.players[state.currentPlayerIdx];
-    playerIndicator.textContent = `${PLAYER_COLORS[p.id].name}'s Turn ${p.type === 'ai' ? '(AI)' : ''}`;
-    playerIndicator.className = `player-${p.id}`;
-
     // Update active territory stats if selected, else current player's aggregate or first territory
     const t = state.territories.get(state.activeTerritoryId) || Array.from(state.territories.values()).find(t => t.playerId === p.id);
     if (t) {
@@ -681,6 +776,38 @@ function updateUI() {
         document.getElementById('stat-income').textContent = `+${t.getIncome()}`;
         document.getElementById('stat-wages').textContent = `-${t.getWages()}`;
         document.getElementById('stat-balance').textContent = t.money;
+
+        // Dim shop buttons based on balance AND ownership
+        document.querySelectorAll('.shop-item').forEach(btn => {
+            const cost = UNIT_COSTS[btn.dataset.unit];
+            // Disable if: 
+            // 1. Not your territory (inspecting enemy)
+            // 2. Not enough money
+            if (t.playerId !== p.id || t.money < cost) {
+                btn.classList.add('disabled');
+                btn.style.opacity = '0.5';
+                btn.style.cursor = 'not-allowed';
+            } else {
+                btn.classList.remove('disabled');
+                btn.style.opacity = '1';
+                btn.style.cursor = 'pointer';
+            }
+        });
+    } else {
+        // Reset shop if no territory active
+        document.querySelectorAll('.shop-item').forEach(btn => {
+            btn.classList.remove('disabled'); btn.style.opacity = '1'; btn.style.cursor = 'pointer';
+        });
+    }
+
+    // End Turn Suggestion using helper
+    const btn = document.getElementById('end-turn-btn');
+    if (state.players[state.currentPlayerIdx].type === 'human') {
+        const hasActions = hasAvailableActions(p.id);
+        if (!hasActions) btn.classList.add('suggest-end-turn');
+        else btn.classList.remove('suggest-end-turn');
+    } else {
+        btn.classList.remove('suggest-end-turn');
     }
 
     updateLeaderboard();
@@ -775,3 +902,21 @@ function render() {
 }
 
 setup();
+
+// Global Cursor Follower Logic
+// Global Cursor Follower Logic
+window.addEventListener('mousemove', (e) => {
+    const cursorFollower = document.getElementById('cursor-follower');
+    if (cursorFollower) {
+        // Condition 1: Shop Item Selected
+        if (state.shopSelected) {
+            cursorFollower.style.left = `${e.clientX}px`;
+            cursorFollower.style.top = `${e.clientY}px`;
+        }
+        // Condition 2: Board Unit Selected (Drag)
+        else if (state.selectedCell && state.selectedCell.unit) {
+            cursorFollower.style.left = `${e.clientX}px`;
+            cursorFollower.style.top = `${e.clientY}px`;
+        }
+    }
+});

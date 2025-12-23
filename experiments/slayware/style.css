@@ -379,7 +379,7 @@ header {
 
 .shop-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 1rem;
 }
 
@@ -535,4 +535,52 @@ header {
 #game-over-stats {
     width: 100%;
     margin-bottom: 1rem;
+}
+
+.shop-item.selected {
+    background: var(--color-accent);
+    color: #fff;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 10px var(--color-accent);
+}
+
+.shop-item.selected i {
+    color: #fff;
+}
+
+.shop-item.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    filter: grayscale(1);
+}
+
+#cursor-follower {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    font-size: 1.5rem;
+    display: none;
+    /* hidden by default */
+    text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes pulse-green {
+    0% {
+        box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.4);
+    }
+
+    70% {
+        box-shadow: 0 0 0 10px rgba(74, 222, 128, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(74, 222, 128, 0);
+    }
+}
+
+.suggest-end-turn {
+    animation: pulse-green 2s infinite;
+    border-color: var(--p4-color) !important;
+    background: var(--p4-color);
 }
