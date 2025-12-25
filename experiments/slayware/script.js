@@ -211,7 +211,7 @@ function setupMapSelection() {
     const playerTextures = 6;
     const bgTextures = ['bg_tile_1.png', 'bg_tile_2.png', 'bg_tile_3.png'];
 
-    const totalTextures = playerTextures + bgTextures.length + 3 + playerTextures + 1 + playerTextures; // +1 water, +1 tree, +1 cap, +6 cap_p, +1 castle, +6 castle_p
+    const totalTextures = playerTextures + bgTextures.length + 3 + playerTextures + 1 + playerTextures + 4 + (playerTextures * 4); // +4 units defaults, +24 player units
     let loadedCount = 0;
     state.playerSprites = {};
 
@@ -259,6 +259,28 @@ function setupMapSelection() {
         tex.src = `assets/castle_${i}.png`;
         tex.onload = () => { state.castleSprites[i] = tex; checkLoad(); };
         tex.onerror = checkLoad;
+    }
+
+    // Load Unit Sprites (Default)
+    state.unitSprites = {};
+    const unitTypes = ['peasant', 'spearman', 'knight', 'baron'];
+    unitTypes.forEach(u => {
+        const img = new Image();
+        img.src = `assets/${u}.png`;
+        img.onload = () => { state.unitSprites[u] = img; checkLoad(); };
+        img.onerror = checkLoad;
+    });
+
+    // Load Player-Specific Unit Sprites
+    state.playerUnitSprites = {};
+    for (let i = 1; i <= playerTextures; i++) {
+        state.playerUnitSprites[i] = {};
+        unitTypes.forEach(u => {
+            const img = new Image();
+            img.src = `assets/${u}_${i}.png`;
+            img.onload = () => { state.playerUnitSprites[i][u] = img; checkLoad(); };
+            img.onerror = checkLoad; // Proceed if missing (fallback to default)
+        });
     }
 
 
@@ -377,17 +399,32 @@ function setupGameEvents() {
                 cursorFollower.style.display = 'block';
                 cursorFollower.innerHTML = ''; // Clear previous content
 
-                if (unit === 'castle') {
+                // Show texture if available
+                if (['peasant', 'spearman', 'knight', 'baron'].includes(unit)) {
                     const pId = state.players[state.currentPlayerIdx].id;
-                    const sprite = (state.castleSprites && state.castleSprites[pId]) || state.castleSprite;
+                    const pSprites = state.playerUnitSprites && state.playerUnitSprites[pId];
+                    const specificSprite = pSprites && pSprites[unit];
+                    const defaultSprite = state.unitSprites && state.unitSprites[unit];
+                    const sprite = (specificSprite && specificSprite.complete && specificSprite.naturalWidth !== 0) ? specificSprite : defaultSprite;
+
                     if (sprite) {
                         const img = sprite.cloneNode();
-                        img.style.width = '50px'; img.style.height = 'auto';
+                        img.style.width = '40px'; img.style.height = 'auto';
                         cursorFollower.appendChild(img);
-                    } else cursorFollower.textContent = '🏰';
+                    } else {
+                        // Fallback icon
+                        const icons = { peasant: '👨', spearman: '🛡️', knight: '🏇', baron: '👑' };
+                        cursorFollower.textContent = icons[unit];
+                    }
+                } else if (unit === 'castle') {
+                    const pId = state.players[state.currentPlayerIdx].id;
+                    const sprite = state.castleSprites[pId] || state.castleSprite;
+                    const img = sprite.cloneNode();
+                    img.style.width = '50px'; img.style.height = 'auto';
+                    cursorFollower.appendChild(img);
                 } else {
-                    const icons = { peasant: '👨', spearman: '🛡️', knight: '🏇', baron: '👑' };
-                    cursorFollower.textContent = icons[unit] || '❓';
+                    const icons = { peasant: '👨', spearman: '🛡️', knight: '🏇', baron: '👑', castle: '🏰' };
+                    cursorFollower.textContent = icons[unit];
                 }
                 // Initial position
                 cursorFollower.style.left = `${e.clientX}px`;
@@ -930,8 +967,26 @@ function processGameClick(e) {
             const cursorFollower = document.getElementById('cursor-follower');
             if (cursorFollower) {
                 cursorFollower.style.display = 'block';
-                const icons = { peasant: '👨', spearman: '🛡️', knight: '🏇', baron: '👑' };
-                cursorFollower.textContent = icons[cell.unit] || '❓';
+                cursorFollower.innerHTML = '';
+
+                const unit = cell.unit;
+                const pId = cell.playerId;
+
+                // Texture Logic
+                const pSprites = state.playerUnitSprites && state.playerUnitSprites[pId];
+                const specificSprite = pSprites && pSprites[unit];
+                const defaultSprite = state.unitSprites && state.unitSprites[unit];
+                const sprite = (specificSprite && specificSprite.complete && specificSprite.naturalWidth !== 0) ? specificSprite : defaultSprite;
+
+                if (sprite) {
+                    const img = sprite.cloneNode();
+                    img.style.width = '40px'; img.style.height = 'auto';
+                    cursorFollower.appendChild(img);
+                } else {
+                    const icons = { peasant: '👨', spearman: '🛡️', knight: '🏇', baron: '👑' };
+                    cursorFollower.textContent = icons[unit] || '❓';
+                }
+
                 // Snap to mouse immediately if possible, or wait for move
                 cursorFollower.style.left = `${e.clientX}px`;
                 cursorFollower.style.top = `${e.clientY}px`;
@@ -1073,6 +1128,17 @@ function executeMove(from, to) {
 // --- Turn Management ---
 function startTurn() {
     const p = state.players[state.currentPlayerIdx];
+
+    // Check if player has been eliminated (has no territories)
+    // Nature (id=0) always plays.
+    if (p.id !== 0) {
+        const hasLand = Array.from(state.territories.values()).some(t => t.playerId === p.id);
+        if (!hasLand) {
+            logEvent(`${p.type === 'human' ? 'You were' : 'Player ' + p.id} eliminated! Skipping turn.`, "system");
+            setTimeout(endTurn, 100);
+            return;
+        }
+    }
     // 1. Nature Growth & Gravestones
     state.grid.forEach(c => {
         if (c.playerId === p.id) {
@@ -1229,17 +1295,18 @@ function updateUI() {
         const income = t.getIncome();
         const wages = t.getWages();
 
-        document.getElementById('stat-land').textContent = t.cells.length;
-        document.getElementById('stat-income').textContent = `+${income}`;
+        document.getElementById('stat-land').innerHTML = `${t.cells.length}<img src="assets/tile_${t.playerId}.png" class="stat-icon">`;
+        document.getElementById('stat-income').innerHTML = `+${income}<img src="assets/coin.png" class="stat-icon">`;
 
         const wagesEl = document.getElementById('stat-wages');
-        wagesEl.textContent = `-${wages}`;
+        wagesEl.innerHTML = `-${wages}<img src="assets/coin.png" class="stat-icon">`;
 
         // Highlight if Wages > Income (Bankruptcy risk)
         if (wages > income) wagesEl.classList.add('text-danger');
         else wagesEl.classList.remove('text-danger');
 
-        document.getElementById('stat-balance').textContent = t.money;
+        const balanceEl = document.getElementById('stat-balance');
+        balanceEl.innerHTML = `${t.money}<img src="assets/coin.png" class="coin-icon">`;
 
         // Dim shop buttons based on balance AND ownership
         document.querySelectorAll('.shop-item').forEach(btn => {
@@ -1411,10 +1478,39 @@ function drawHex(ctx, x, y, size, cell) {
         }
     }
     if (cell.unit) {
-        drawIcon(ctx, x, surfaceY, { peasant: '👨', spearman: '🛡️', knight: '🏇', baron: '👑' }[cell.unit]);
-        const isCurrentPlayer = cell.playerId === state.players[state.currentPlayerIdx].id;
-        if (cell.hasMoved) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.arc(x, surfaceY, size / 2, 0, Math.PI * 2); ctx.fill(); }
-        else if (isCurrentPlayer && Math.sin(Date.now() / 200) > 0) drawPulse(ctx, x, surfaceY);
+        // Check for player-specific sprite first, then default
+        const pSprites = state.playerUnitSprites && state.playerUnitSprites[cell.playerId];
+        const specificSprite = pSprites && pSprites[cell.unit];
+        const defaultSprite = state.unitSprites && state.unitSprites[cell.unit];
+
+        const sprite = (specificSprite && specificSprite.complete && specificSprite.naturalWidth !== 0) ? specificSprite : defaultSprite;
+
+        if (sprite && sprite.complete && sprite.naturalWidth !== 0) {
+            const scale = (size * 1.5) / sprite.width; // Slight tweak for units
+            const h = sprite.height * scale;
+            const w = sprite.width * scale;
+
+            // User specified: "units textures are built to that their center is where the center of the hex tile should be"
+            const drawX = x - w / 2;
+            const drawY = surfaceY - h / 2;
+
+            ctx.drawImage(sprite, drawX, drawY, w, h);
+
+            const isCurrentPlayer = cell.playerId === state.players[state.currentPlayerIdx].id;
+            if (cell.hasMoved) {
+                ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                ctx.beginPath();
+                ctx.arc(x, drawY + h / 2, w / 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            else if (isCurrentPlayer && Math.sin(Date.now() / 200) > 0) {
+                // Pulse
+                drawPulse(ctx, x, surfaceY);
+            }
+        } else {
+            drawIcon(ctx, x, surfaceY, { peasant: '👨', spearman: '🛡️', knight: '🏇', baron: '👑' }[cell.unit]);
+            if (cell.hasMoved) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.arc(x, surfaceY, size / 2, 0, Math.PI * 2); ctx.fill(); }
+        }
     }
     if (cell.tree) {
         if (state.treeSprite && state.treeSprite.complete) {

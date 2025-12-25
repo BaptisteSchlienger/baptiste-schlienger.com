@@ -426,6 +426,7 @@ header {
 .shop-item span {
     font-size: 0.75rem;
     font-weight: 600;
+    display: inline-flex;
 }
 
 .shop-item:hover {
@@ -682,4 +683,29 @@ header {
     color: #ef4444 !important;
     text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
     font-weight: 800;
+}
+
+/* Coin Textures */
+.coin-icon {
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+    margin-left: 4px;
+    margin-bottom: 2px;
+}
+/* Shop Unit Icons */
+.shop-unit-icon {
+    width: 32px;
+    height: auto;
+    margin-bottom: 4px;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+
+/* Territory Stat Icons */
+.stat-icon {
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+    margin-left: 4px;
+    margin-bottom: 2px;
 }
