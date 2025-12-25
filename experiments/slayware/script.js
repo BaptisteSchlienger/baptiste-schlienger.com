@@ -252,12 +252,16 @@ function setupMapSelection() {
 
     // Load Player-Specific Capitals (Optional)
     state.capitalSprites = {};
-    for (let i = 1; i <= playerTextures; i++) {
+    const PLAYERS_WITH_TILE_TEXTURES = [1, 2, 3, 4, 5, 6];
+    const PLAYERS_WITH_UNIT_TEXTURES = [1];
+    const PLAYERS_WITH_BUILDING_TEXTURES = [1];
+
+    PLAYERS_WITH_BUILDING_TEXTURES.forEach(i => {
         const tex = new Image();
         tex.src = `assets/capital_${i}.png`;
         tex.onload = () => { state.capitalSprites[i] = tex; checkLoad(); };
         tex.onerror = checkLoad; // Count anyway so we don't hang
-    }
+    });
 
     // Load Castle (Default)
     const castleImg = new Image();
@@ -267,12 +271,12 @@ function setupMapSelection() {
 
     // Load Player-Specific Castles
     state.castleSprites = {};
-    for (let i = 1; i <= playerTextures; i++) {
+    PLAYERS_WITH_BUILDING_TEXTURES.forEach(i => {
         const tex = new Image();
         tex.src = `assets/castle_${i}.png`;
         tex.onload = () => { state.castleSprites[i] = tex; checkLoad(); };
         tex.onerror = checkLoad;
-    }
+    });
 
     // Load Unit Sprites (Default)
     state.unitSprites = {};
@@ -286,7 +290,7 @@ function setupMapSelection() {
 
     // Load Player-Specific Unit Sprites
     state.playerUnitSprites = {};
-    for (let i = 1; i <= playerTextures; i++) {
+    PLAYERS_WITH_UNIT_TEXTURES.forEach(i => {
         state.playerUnitSprites[i] = {};
         unitTypes.forEach(u => {
             const img = new Image();
@@ -294,11 +298,14 @@ function setupMapSelection() {
             img.onload = () => { state.playerUnitSprites[i][u] = img; checkLoad(); };
             img.onerror = checkLoad; // Proceed if missing (fallback to default)
         });
-    }
+    });
 
 
     // Load Player Sprites
+
+
     for (let i = 1; i <= playerTextures; i++) {
+        if (!PLAYERS_WITH_TILE_TEXTURES.includes(i)) continue;
         const tex = new Image();
         tex.src = `assets/tile_${i}.png`;
         tex.onload = checkLoad;
