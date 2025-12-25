@@ -62,6 +62,13 @@ function noise(x, y, z) {
 
 
 const UNIT_COSTS = { peasant: 10, spearman: 20, knight: 30, baron: 40, castle: 15 };
+const UNIT_DESCRIPTIONS = {
+    peasant: { desc: "Weakest unit but cheap. Can take unprotected tiles and cut down trees.", wage: 2 },
+    spearman: { desc: "Stronger than peasants. Good for holding lines and taking capitals.", wage: 6 },
+    knight: { desc: "Stronger than peasants and spearmen. Can also take castles.", wage: 18 },
+    baron: { desc: "The ultimate unit. Dominates but expensive.", wage: 54 },
+    castle: { desc: "Defensive structure. Protects territory from peasants and spearmen.", wage: 0 }
+};
 const WAGES = { peasant: 2, spearman: 6, knight: 18, baron: 54 };
 const STRENGTHS = { peasant: 1, spearman: 2, knight: 3, baron: 4, castle: 2, capital: 1 };
 const MERGE_MAP = {
@@ -369,7 +376,10 @@ function setupGameEvents() {
     const modal = document.getElementById('help-modal');
     const gameOverModal = document.getElementById('game-over-modal');
     document.getElementById('help-btn').addEventListener('click', () => modal.classList.remove('hidden'));
-    document.querySelector('.close-modal').addEventListener('click', () => modal.classList.add('hidden'));
+    document.querySelectorAll('.close-modal').forEach(btn => btn.addEventListener('click', () => {
+        modal.classList.add('hidden');
+        document.getElementById('map-modal').classList.add('hidden');
+    }));
     window.addEventListener('click', (e) => {
         if (e.target === modal) modal.classList.add('hidden');
     });
@@ -378,7 +388,50 @@ function setupGameEvents() {
     document.getElementById('quit-btn').addEventListener('click', restartGame);
 
     // Shop Button Logic
+    const tooltip = document.getElementById('shop-tooltip');
+
     document.querySelectorAll('.shop-item').forEach(btn => {
+        // Tooltip Listeners
+        btn.addEventListener('mouseenter', (e) => {
+            const unit = btn.dataset.unit;
+            const info = UNIT_DESCRIPTIONS[unit];
+            const cost = UNIT_COSTS[unit];
+            if (!info) return;
+
+            tooltip.innerHTML = `
+                <h4>${unit}</h4>
+                <p>${info.desc}</p>
+                <div class="stats">
+                    <div class="stat-row cost">Price: ${cost}<img src="assets/coin.png" class="coin-icon"></div>
+                    <div class="stat-row wage">Wage: -${info.wage}<img src="assets/coin.png" class="coin-icon"></div>
+                </div>
+            `;
+            tooltip.classList.remove('hidden');
+        });
+
+        btn.addEventListener('mousemove', (e) => {
+            const padding = 15;
+            let left = e.clientX + padding;
+            let top = e.clientY + padding;
+
+            // Check right edge
+            if (left + tooltip.offsetWidth > window.innerWidth) {
+                left = e.clientX - tooltip.offsetWidth - padding;
+            }
+
+            // Check bottom edge
+            if (top + tooltip.offsetHeight > window.innerHeight) {
+                top = e.clientY - tooltip.offsetHeight - padding;
+            }
+
+            tooltip.style.left = `${left}px`;
+            tooltip.style.top = `${top}px`;
+        });
+
+        btn.addEventListener('mouseleave', () => {
+            tooltip.classList.add('hidden');
+        });
+
         btn.addEventListener('click', (e) => {
             if (state.players[state.currentPlayerIdx].type !== 'human') return;
             const unit = btn.dataset.unit;
@@ -1637,10 +1690,7 @@ function centerCamera() {
     const mapHeight = maxY - minY + HEX_SIZE * 3;
     const zoomX = canvas.clientWidth / mapWidth;
     const zoomY = canvas.clientHeight / mapHeight;
-    // Auto-zoom to fit, but max out at 1.0
-    state.camera.zoom = Math.min(zoomX, zoomY, 1.0);
-    // Clamp minimum zoom to avoid tiny maps
-    state.camera.zoom = Math.max(state.camera.zoom, 0.3);
+    state.camera.zoom = 1.0;
 
     // Apply zoom to center calculation
     state.camera.x = -mapCenterX * state.camera.zoom;
@@ -1843,10 +1893,7 @@ function render() {
 
 setup();
 
-document.getElementById('recenter-btn').addEventListener('click', () => {
-    state.camera.x = 0;
-    state.camera.y = 0;
-});
+document.getElementById('recenter-btn').addEventListener('click', centerCamera);
 
 // Global Cursor Follower Logic
 // Global Cursor Follower Logic

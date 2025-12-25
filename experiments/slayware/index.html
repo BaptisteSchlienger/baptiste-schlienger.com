@@ -12,6 +12,10 @@
 <body>
     <!-- Setup Screen -->
     <div id="setup-screen" class="setup-overlay">
+        <div style="position: absolute; top: 1rem; left: 2rem; z-index: 2001;">
+            <a href="../../index.html#experiments" class="back-link" style="margin-top: 12px;"><i
+                    class="fas fa-arrow-left"></i> Portfolio</a>
+        </div>
         <div class="setup-card glass">
             <h2>SlayWare Setup</h2>
             <p>Divide and Conquer the Island.</p>
@@ -55,6 +59,7 @@
                 </div>
 
                 <button id="start-game-btn" class="primary-btn wide">Start Conquest</button>
+
             </div>
         </div>
     </div>
@@ -180,23 +185,23 @@
                 <div class="sidebar-section shop" id="shop-container">
                     <h3>Unit Shop</h3>
                     <div class="shop-grid">
-                        <button class="shop-item" data-unit="peasant" title="Peasant (10 coins)">
+                        <button class="shop-item" data-unit="peasant">
                             <img src="assets/shop_peasant.png" class="shop-unit-icon" alt="Peasant">
                             <span>10<img src="assets/coin.png" class="coin-icon" alt="c"></span>
                         </button>
-                        <button class="shop-item" data-unit="spearman" title="Spearman (20 coins)">
+                        <button class="shop-item" data-unit="spearman">
                             <img src="assets/shop_spearman.png" class="shop-unit-icon" alt="Spearman">
                             <span>20<img src="assets/coin.png" class="coin-icon" alt="c"></span>
                         </button>
-                        <button class="shop-item" data-unit="knight" title="Knight (30 coins)">
+                        <button class="shop-item" data-unit="knight">
                             <img src="assets/shop_knight.png" class="shop-unit-icon" alt="Knight">
                             <span>30<img src="assets/coin.png" class="coin-icon" alt="c"></span>
                         </button>
-                        <button class="shop-item" data-unit="baron" title="Baron (40 coins)">
+                        <button class="shop-item" data-unit="baron">
                             <img src="assets/shop_baron.png" class="shop-unit-icon" alt="Baron">
                             <span>40<img src="assets/coin.png" class="coin-icon" alt="c"></span>
                         </button>
-                        <button class="shop-item" data-unit="castle" title="Castle (15 coins)">
+                        <button class="shop-item" data-unit="castle">
                             <img src="assets/shop_castle.png" class="shop-unit-icon" alt="Castle">
                             <span>15<img src="assets/coin.png" class="coin-icon" alt="c"></span>
                         </button>
@@ -222,6 +227,7 @@
     </div>
 
     <div id="cursor-follower" class="cursor-follower" style="display:none;"></div>
+    <div id="shop-tooltip" class="shop-tooltip hidden"></div>
 
     <script src="maps/earth.js"></script>
     <script src="maps/earth_sm.js"></script>
