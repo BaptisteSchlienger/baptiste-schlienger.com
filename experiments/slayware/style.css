@@ -3,7 +3,7 @@
     --color-surface: #1e293b;
     --color-accent: #3b82f6;
     --color-text: #f8fafc;
-    --color-muted: #94a3b8;
+    --color-muted: #a5b3c8;
 
     /* Player Colors */
     --p1-color: #f87171;
@@ -21,7 +21,8 @@
     /* Orange */
 
     /* Glass Theme */
-    --glass-bg: rgba(15, 23, 42, 0.45);
+    /* --glass-bg: rgba(15, 23, 42, 0.2); */
+    --glass-bg: rgba(43, 103, 140, 0.6);
     --glass-border: rgba(255, 255, 255, 0.1);
     --glass-blur: blur(24px);
     --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
@@ -150,7 +151,7 @@ header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: rgba(15, 23, 42, 0.6);
+    background: var(--glass-bg);
     /* More transparent */
     backdrop-filter: blur(10px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);

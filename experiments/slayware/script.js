@@ -76,22 +76,16 @@ const MERGE_MAP = {
     'spearman+spearman': 'baron', 'peasant+knight': 'baron', 'knight+peasant': 'baron'
 };
 
+// --- Constants & Config ---
 const MAP_DEFINITIONS = {
-    random: { name: "Random Blob", icon: "fa-dice", desc: "Classic procedurally generated island.", type: 'random', size: 7 },
-    big_hex: { name: "Big Hex", icon: "fa-vector-square", desc: "A perfectly symmetrical large hexagon.", type: 'hex', size: 9 },
-    small_hex: { name: "Small Hex", icon: "fa-cube", desc: "A tighter, quicker skirmish map.", type: 'hex', size: 5 },
-    westeros: {
-        name: "Westeros", icon: "fa-dragon", desc: "The Seven Kingdoms.", type: 'ascii',
-        get data() { return window.MAP_DATA_WESTEROS || []; }
-    },
-    earth_sm: {
-        name: "Small Earth", icon: "fa-globe", desc: "A smaller world map.", type: 'ascii',
-        get data() { return window.MAP_DATA_EARTH_SM || []; }
-    },
-    earth: {
-        name: "Earth", icon: "fa-globe-americas", desc: "A rough approximation of the world.", type: 'ascii',
-        get data() { return window.MAP_DATA_EARTH || []; }
-    }
+    random: { name: "Random Island", desc: "Procedurally generated archipelago", icon: "fa-water", type: 'random', size: 7 },
+    earth: { name: "Earth", desc: "The Blue Marble", icon: "fa-globe-americas", dataVar: "MAP_DATA_EARTH", type: 'ascii' },
+    japan: { name: "Japan", desc: "Land of the Rising Sun", icon: "fa-sun", dataVar: "MAP_DATA_JAPAN", type: 'ascii' },
+    great_britain: { name: "Great Britain", desc: "The British Isles", icon: "fa-crown", dataVar: "MAP_DATA_GREAT_BRITAIN", type: 'ascii' },
+    hispaniola: { name: "Hispaniola", desc: "Caribbean Island", icon: "fa-umbrella-beach", dataVar: "MAP_DATA_HISPANIOLA", type: 'ascii' },
+    cuba: { name: "Cuba", desc: "Pearl of the Antilles", icon: "fa-smoking", dataVar: "MAP_DATA_CUBA", type: 'ascii' },
+    corsica: { name: "Corsica", desc: "The Island of Beauty", icon: "fa-mountain", dataVar: "MAP_DATA_CORSICA", type: 'ascii' },
+    guadeloupe: { name: "Guadeloupe", desc: "The Butterfly Island", icon: "fa-leaf", dataVar: "MAP_DATA_GUADELOUPE", type: 'ascii' }
 };
 
 class Hex {
@@ -140,6 +134,8 @@ const state = {
     validTargets: new Set(),
     renderLoopId: null, // Track the animation frame ID
     bgSprites: [],
+    bgLodSprite: null,
+    bgLodPattern: null,
     waterSprite: null
 };
 
@@ -219,7 +215,7 @@ function setupMapSelection() {
     const playerTextures = 6;
     const bgTextures = ['bg_tile_1.png', 'bg_tile_2.png', 'bg_tile_3.png'];
 
-    const totalTextures = playerTextures + bgTextures.length + 3 + playerTextures + 1 + playerTextures + 4 + (playerTextures * 4); // +4 units defaults, +24 player units
+    const totalTextures = playerTextures + bgTextures.length + 3 + playerTextures + 1 + playerTextures + 4 + (playerTextures * 4) + 1; // Added +1 for bg_lod
     let loadedCount = 0;
     state.playerSprites = {};
 
@@ -320,6 +316,17 @@ function setupMapSelection() {
         img.onload = checkLoad;
         state.bgSprites.push(img);
     });
+
+    // Load LOD Background (Static Texture)
+    const lodImg = new Image();
+    lodImg.src = 'assets/bg_lod.png';
+    lodImg.onload = () => {
+        state.bgLodSprite = lodImg;
+        // Pre-create pattern if context is available (it is global)
+        state.bgLodPattern = ctx.createPattern(lodImg, 'repeat');
+        checkLoad();
+    };
+    lodImg.onerror = checkLoad; // Proceed if missing (fallback to color)
 
     close.addEventListener('click', () => modal.classList.add('hidden'));
     window.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
@@ -581,7 +588,8 @@ function generateIsland(totalPlayers, mapType = 'random', forcedSize = null) {
             });
         }
     } else if (config.type === 'ascii') {
-        allHexes = parseAsciiMap(config.data);
+        const mapData = config.data || window[config.dataVar] || [];
+        allHexes = parseAsciiMap(mapData);
     }
 
     // 1. Calculate fair quotas
@@ -661,16 +669,17 @@ function parseAsciiMap(lines) {
                 // r = y - centerY
                 // q = x - centerX - (y - centerY)/2
 
-                // Let's just use raw coordinates and center later.
-                // Doubled coordinates might be easier for ASCII visual 'X X X'
-                // Let's assume standard dense text block 'XXXX'
-                // q = x - (y - (y&1)) / 2
-                // r = y
+                // Improved mapping for Flat Top Hexes (which the game uses)
+                // "Odd-Q" vertical layout preserves horizontal alignment better than the previous method
+                // q = column (x)
+                // r = row (y) - shift
+                let q = x;
+                // Double the vertical resolution to fix "squished" aspect ratio
+                // Map each 'X' to 2 vertical hexes
+                let rBase = (y * 2) - Math.floor(x / 2);
 
-                let q = x - Math.floor(y / 2);
-                let r = y;
-
-                hexes.push(new Hex(q, r));
+                hexes.push(new Hex(q, rBase));
+                hexes.push(new Hex(q, rBase + 1));
             }
         }
     }
@@ -1913,6 +1922,22 @@ function render(timestamp) {
     lastFrameTime = timestamp - (elapsed % frameInterval);
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Optimization: Draw LOD Background in Screen Space (Identity)
+    // This prevents massive pattern scaling and coordinate issues
+    if (state.camera.zoom < 0.7) {
+        ctx.save();
+        // Keep the code below for reference
+        // if (state.bgLodPattern) {
+        //     ctx.fillStyle = state.bgLodPattern;
+        // } else {
+        //     ctx.fillStyle = '#2b678c';
+        // }
+        ctx.fillStyle = '#2b678c';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+    }
+
     ctx.save();
 
     // Move to center of canvas
@@ -1924,11 +1949,14 @@ function render(timestamp) {
     // Apply Zoom
     ctx.scale(state.camera.zoom, state.camera.zoom);
 
-    // Draw Infinite Background
-    drawBackground(ctx);
+    // Draw Detailed Background Layers (if zoomed in)
+    if (state.camera.zoom >= 0.7) {
+        // Draw Infinite Background
+        drawBackground(ctx);
 
-    // Draw Water Layer
-    drawWater(ctx);
+        // Draw Water Layer
+        drawWater(ctx);
+    }
 
     // Sort cells by depth (Y coordinate) to ensure correct overlap for 3D tiles
     const sortedCells = Array.from(state.grid.values()).sort((a, b) => {

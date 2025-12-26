@@ -1,0 +1,22 @@
+window.MAP_DATA_JAPAN = [
+    "                                        ",
+    "                              XX     ",
+    "                             XXXXXX  ",
+    "                            XXXXXXXXX",
+    "                          XXXXXXXX   ",
+    "                         XXX         ",
+    "                          XX         ",
+    "                         XXXX        ",
+    "                         XXXXX       ",
+    "                        XXXXXX       ",
+    "                       XXXXXX        ",
+    "                     XXXXXX          ",
+    "                XX XXXXXXXX          ",
+    "               XXXXXXXXXXX           ",
+    "       XXXXXXXXXXXXXXXXXX            ",
+    "   XXXXXX X XXX                      ",
+    " XX    XXXX XXX                      ",
+    "XXXXX XX                             ",
+    "XXXX                                 ",
+    " X                                   "
+];

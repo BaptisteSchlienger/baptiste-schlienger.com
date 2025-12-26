@@ -1,0 +1,20 @@
+window.MAP_DATA_GREAT_BRITAIN = [
+    "            XX              ",
+    "        X XXX               ",
+    "   XX  XXX X                ",
+    "  XXXXXXXXXXX XX            ",
+    "  X  XXXXXXXXXX             ",
+    "     XXXXXXXXX              ",
+    "      XXXXXXXX              ",
+    "    XXX XXXXXXXX            ",
+    "  XXXX  XXXXXXXXX           ",
+    "XXXXXXX     XXXXXXX         ",
+    "    XX      XXXXXXXXX       ",
+    "             XXXXXXXXX      ",
+    "         XXXXXXXXXXXXXXXX   ",
+    "        XXXXXXXXXXXXXXXXX   ",
+    "      XXX XXXXXXXXXXXXXX    ",
+    "            XXXXXXXXXXXXXX  ",
+    "        XXXXXXXXXXXXXXXXXXXX",
+    "    XXXXXXX                 "
+];
