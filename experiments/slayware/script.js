@@ -78,7 +78,7 @@ const MERGE_MAP = {
 
 // --- Constants & Config ---
 const MAP_DEFINITIONS = {
-    random: { name: "Random Island", desc: "Procedurally generated archipelago", icon: "fa-water", type: 'random', size: 7 },
+    random: { name: "Random Island", desc: "", icon: "fa-water", type: 'random', size: 7 },
     earth: { name: "Earth", desc: "The Blue Marble", icon: "fa-globe-americas", dataVar: "MAP_DATA_EARTH", type: 'ascii' },
     japan: { name: "Japan", desc: "Land of the Rising Sun", icon: "fa-sun", dataVar: "MAP_DATA_JAPAN", type: 'ascii' },
     great_britain: { name: "Great Britain", desc: "The British Isles", icon: "fa-crown", dataVar: "MAP_DATA_GREAT_BRITAIN", type: 'ascii' },
@@ -87,6 +87,63 @@ const MAP_DEFINITIONS = {
     corsica: { name: "Corsica", desc: "The Island of Beauty", icon: "fa-mountain", dataVar: "MAP_DATA_CORSICA", type: 'ascii' },
     guadeloupe: { name: "Guadeloupe", desc: "The Butterfly Island", icon: "fa-leaf", dataVar: "MAP_DATA_GUADELOUPE", type: 'ascii' }
 };
+
+// --- Campaign Levels ---
+const ISLAND_NAMES = [
+    "Anjara", "Aurelion", "Azulora", "Azurine", "Bellanova Cay", "Bellariva", "Bellavista Cay", "Bellazur",
+    "Belmora Cay", "Brisamar", "Brisola", "Calypsa", "Calyra Cay", "Cay Lume", "Cay Santa Luz", "Cayu Verdeon",
+    "Coralia", "Coralisse", "Coramare", "Corasol", "Coravela", "Coraviva", "Corazón Isle", "Isla Aventura",
+    "Isla Azola", "Isla Azuria", "Isla Bravía", "Isla Brezia", "Isla Candela", "Isla Candora", "Isla Doradoa",
+    "Isla Dorea", "Isla Florina", "Isla Lumina", "Isla Mareva", "Isla Marisol", "Isla Morenae", "Isla Nerissa",
+    "Isla Palmera", "Isla Serapha", "Isla Serena", "Isla Solaria", "Isla Solena", "Isla Trelina", "Isla Tórida",
+    "Isla Ventara", "Isla Venturi", "Isla Vireya", "Isla Zenara", "Koralyn", "Lumeria", "Marave", "Maraven",
+    "Maravilla Minor", "Marea Cay", "Maribela", "Marisolea", "Marisolva", "Miraflores Isle", "Morava", "Morena",
+    "Olasia", "Orevia", "Palmara", "Palmorea", "San Aleon", "San Amaro", "San Belaro", "San Calvero", "San Corino",
+    "San Dorello", "San Estavio", "San Lorea", "San Lucayo", "San Lumea", "San Nerilo", "San Olmero", "San Trelis",
+    "San Valeo", "Santa Armina", "Santa Breva", "Santa Calao", "Santa Calista", "Santa Calyra", "Santa Corala",
+    "Santa Elvora", "Santa Lirea", "Santa Mirana", "Santa Nerea", "Santa Nyra", "Santa Olivae", "Santa Orelia",
+    "Santa Valissa", "Santa Virelle", "Santa Ylena", "Santa Zarela", "Solarya", "Valmera", "Ventosa", "Zafira Cay"
+].sort(); // Ensure A-Z order
+
+const CAMPAIGN_LEVELS = ISLAND_NAMES.slice(0, 100).map((name, i) => {
+    // Difficulty Progression: 0 -> 99
+    // Players: 3 (0-32), 4 (33-65), 5 (66-89), 6 (90-99)
+    let totalPlayers = 3;
+    if (i > 32) totalPlayers = 4;
+    if (i > 65) totalPlayers = 5;
+    if (i > 89) totalPlayers = 6;
+
+    // Map Size: Linear from 60 to 300
+    const mapSize = Math.floor(60 + (i * 2.4));
+
+    // AI Difficulty: 1 (0-24), 2 (25-49), 3 (50-74), 4 (75-99)
+    const aiDifficulty = 1 + Math.floor(i / 25);
+
+    return {
+        id: `level_${i}`,
+        index: i,
+        name: name,
+        seed: name, // Seed for RNG
+        totalPlayers: totalPlayers,
+        mapSize: mapSize,
+        aiDifficulty: aiDifficulty
+    };
+});
+
+function getProgress() {
+    try {
+        const data = localStorage.getItem('slayware_progress');
+        return data ? JSON.parse(data) : [];
+    } catch (e) { return []; }
+}
+
+function saveLevelComplete(levelIndex) {
+    const progress = getProgress();
+    if (!progress.includes(levelIndex)) {
+        progress.push(levelIndex);
+        localStorage.setItem('slayware_progress', JSON.stringify(progress));
+    }
+}
 
 class Hex {
     constructor(q, r) { this.q = q; this.r = r; }
@@ -136,7 +193,10 @@ const state = {
     bgSprites: [],
     bgLodSprite: null,
     bgLodPattern: null,
-    waterSprite: null
+    waterSprite: null,
+    graveSprite: null,
+    hexes: [],
+    aiDifficulty: 2 // 1=Easy, 2=Normal, 3=Hard, 4=Expert
 };
 
 // --- Initialization & Setup ---
@@ -150,212 +210,393 @@ function setup() {
     totalBtns.forEach(btn => btn.addEventListener('click', () => {
         totalBtns.forEach(b => b.classList.remove('active')); btn.classList.add('active'); totalCount = parseInt(btn.dataset.total);
     }));
+
+    // AI Level Selector
+    const aiBtns = document.querySelectorAll('.ai-btn');
+    aiBtns.forEach(btn => btn.addEventListener('click', () => {
+        aiBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.aiDifficulty = parseInt(btn.dataset.level);
+    }));
+
+    // Main Tab Switching
+    const tabBtns = document.querySelectorAll('.setup-tab');
+    const tabPanels = document.querySelectorAll('.setup-panel');
+    tabBtns.forEach(btn => btn.addEventListener('click', () => {
+        tabBtns.forEach(b => b.classList.remove('active'));
+        tabPanels.forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`tab-${btn.dataset.target}`).classList.add('active');
+    }));
+
+    // Map Modal Events
+    const modal = document.getElementById('map-modal');
+    const openBtn = document.getElementById('select-map-btn');
+    const closeBtn = document.getElementById('close-map-modal');
+
+    if (openBtn && modal) {
+        openBtn.onclick = () => {
+            modal.classList.remove('hidden');
+            // If random, show size slider logic if needed? 
+            // Currently logic handles size slider independently.
+        };
+        closeBtn.onclick = () => modal.classList.add('hidden');
+        window.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
+    }
+
     document.getElementById('start-game-btn').addEventListener('click', () => {
         if (humanCount > totalCount) { alert("Humans cannot exceed total players!"); return; }
         startGame(humanCount, totalCount);
     });
 
-
-    setupMapSelection();
-}
-
-function setupMapSelection() {
-    const btn = document.getElementById('select-map-btn');
-    const modal = document.getElementById('map-modal');
-    const close = document.getElementById('close-map-modal');
-    const list = document.getElementById('map-list');
-    const selectedName = document.getElementById('selected-map-name');
-    const selectedInput = document.getElementById('selected-map-id');
-
-    const sliderGroup = document.getElementById('map-size-group');
-    const slider = document.getElementById('map-size-slider');
-    const sliderDisplay = document.getElementById('map-size-display');
-
-    // Toggle slider visibility
-    const updateSliderVisibility = (key) => {
-        if (key === 'random') sliderGroup.classList.remove('hidden');
-        else sliderGroup.classList.add('hidden');
-    };
-
-    // Initial check
-    updateSliderVisibility(selectedInput.value);
-
-    // Slider Value Update
-    slider.addEventListener('input', (e) => {
-        sliderDisplay.textContent = `${e.target.value} Hexes`;
-    });
-
-    btn.addEventListener('click', () => {
-        // Populate list
-        list.innerHTML = '';
-        Object.entries(MAP_DEFINITIONS).forEach(([key, map]) => {
-            const card = document.createElement('div');
-            card.className = `map-card ${selectedInput.value === key ? 'active' : ''}`;
-            card.innerHTML = `
-                <i class="fas ${map.icon}"></i>
-                <h4>${map.name}</h4>
-                <p>${map.desc}</p>
-            `;
-            card.addEventListener('click', () => {
-                selectedInput.value = key;
-                selectedName.textContent = map.name;
-                updateSliderVisibility(key); // Update Visibility
-                modal.classList.add('hidden');
-                document.querySelectorAll('.map-card').forEach(c => c.classList.remove('active'));
-                card.classList.add('active');
-            });
-            list.appendChild(card);
+    // Map Size Slider
+    const sizeSlider = document.getElementById('map-size-slider');
+    const sizeDisplay = document.getElementById('map-size-display');
+    if (sizeSlider && sizeDisplay) {
+        sizeSlider.addEventListener('input', () => {
+            sizeDisplay.textContent = `${sizeSlider.value} Hexes`;
         });
-        modal.classList.remove('hidden');
-    });
-
-
-
-    // Initial Load of Textures (Players + Background + Water)
-    const playerTextures = 6;
-    const bgTextures = ['bg_tile_1.png', 'bg_tile_2.png', 'bg_tile_3.png'];
-
-    const totalTextures = playerTextures + bgTextures.length + 3 + playerTextures + 1 + playerTextures + 4 + (playerTextures * 4) + 1; // Added +1 for bg_lod
-    let loadedCount = 0;
-    state.playerSprites = {};
-
-    const checkLoad = () => {
-        loadedCount++;
-        if (loadedCount === totalTextures) render();
-    };
-
-    const waterImg = new Image();
-    waterImg.src = 'assets/water_tile.png';
-    waterImg.onload = () => {
-        state.waterSprite = waterImg;
-        state.playerSprites[0] = waterImg; // Assign to Neutral/Ocean for rendering
-        checkLoad();
-        startRenderLoop();
-    };
-    waterImg.onerror = checkLoad; // Proceed even if fails
-
-    // Load Tree (User provided)
-    const treeImg = new Image();
-    treeImg.src = 'assets/tree.png';
-    treeImg.onload = () => { state.treeSprite = treeImg; checkLoad(); };
-    treeImg.onerror = checkLoad;
-
-    // Load Capital (Default)
-    const capitalImg = new Image();
-    capitalImg.src = 'assets/capital.png';
-    capitalImg.onload = () => { state.capitalSprite = capitalImg; checkLoad(); };
-    capitalImg.onerror = checkLoad;
-
-    // Load Player-Specific Capitals (Optional)
-    state.capitalSprites = {};
-    const PLAYERS_WITH_TILE_TEXTURES = [1, 2, 3, 4, 5, 6];
-    const PLAYERS_WITH_UNIT_TEXTURES = [1];
-    const PLAYERS_WITH_BUILDING_TEXTURES = [1];
-
-    PLAYERS_WITH_BUILDING_TEXTURES.forEach(i => {
-        const tex = new Image();
-        tex.src = `assets/capital_${i}.png`;
-        tex.onload = () => { state.capitalSprites[i] = tex; checkLoad(); };
-        tex.onerror = checkLoad; // Count anyway so we don't hang
-    });
-
-    // Load Castle (Default)
-    const castleImg = new Image();
-    castleImg.src = 'assets/castle.png';
-    castleImg.onload = () => { state.castleSprite = castleImg; checkLoad(); };
-    castleImg.onerror = checkLoad;
-
-    // Load Player-Specific Castles
-    state.castleSprites = {};
-    PLAYERS_WITH_BUILDING_TEXTURES.forEach(i => {
-        const tex = new Image();
-        tex.src = `assets/castle_${i}.png`;
-        tex.onload = () => { state.castleSprites[i] = tex; checkLoad(); };
-        tex.onerror = checkLoad;
-    });
-
-    // Load Unit Sprites (Default)
-    state.unitSprites = {};
-    const unitTypes = ['peasant', 'spearman', 'knight', 'baron'];
-    unitTypes.forEach(u => {
-        const img = new Image();
-        img.src = `assets/${u}.png`;
-        img.onload = () => { state.unitSprites[u] = img; checkLoad(); };
-        img.onerror = checkLoad;
-    });
-
-    // Load Player-Specific Unit Sprites
-    state.playerUnitSprites = {};
-    PLAYERS_WITH_UNIT_TEXTURES.forEach(i => {
-        state.playerUnitSprites[i] = {};
-        unitTypes.forEach(u => {
-            const img = new Image();
-            img.src = `assets/${u}_${i}.png`;
-            img.onload = () => { state.playerUnitSprites[i][u] = img; checkLoad(); };
-            img.onerror = checkLoad; // Proceed if missing (fallback to default)
-        });
-    });
-
-
-    // Load Player Sprites
-
-
-    for (let i = 1; i <= playerTextures; i++) {
-        if (!PLAYERS_WITH_TILE_TEXTURES.includes(i)) continue;
-        const tex = new Image();
-        tex.src = `assets/tile_${i}.png`;
-        tex.onload = checkLoad;
-        state.playerSprites[i] = tex;
     }
 
-    // Load Background Sprites
-    state.bgSprites = [];
-    bgTextures.forEach(file => {
-        const img = new Image();
-        img.src = `assets/${file}`;
-        img.onload = checkLoad;
-        state.bgSprites.push(img);
+    renderSetupScreens();
+}
+
+// --- Render Setup Screens ---
+function renderSetupScreens() {
+    // 1. Render Custom Map Grid (Inside Modal)
+    const list = document.getElementById('map-list');
+    const idInput = document.getElementById('selected-map-id');
+    const nameSpan = document.getElementById('selected-map-name');
+    const modal = document.getElementById('map-modal');
+
+    // Clear existing
+    if (list) {
+        list.innerHTML = '';
+
+        Object.keys(MAP_DEFINITIONS).forEach(key => {
+            const m = MAP_DEFINITIONS[key];
+            const div = document.createElement('div');
+            div.className = 'map-card'; // Reusing map-card style (block)
+            // if (key === idInput.value) div.classList.add('active'); 
+
+            const iconHtml = m.type === 'random'
+                ? '<i class="fas fa-dice map-icon"></i>'
+                : `<i class="fas ${m.icon} map-icon"></i>`;
+
+            // Calculate Map Size (Hex Count)
+            let sizeText = "Variable Size";
+            if (m.type === 'ascii' && m.dataVar && window[m.dataVar]) {
+                const hexes = parseAsciiMap(window[m.dataVar]);
+                sizeText = `${hexes.length} Hexes`;
+            } else if (m.type === 'random') {
+                sizeText = "50-500 Hexes";
+            }
+
+            div.innerHTML = `
+                ${iconHtml}
+                <div class="map-info">
+                    <h3>${m.name}</h3>
+                    <p>${m.desc}</p>
+                    <p style="font-size: 0.75rem; color: var(--color-accent); margin-top: 4px;">${sizeText}</p>
+                </div>
+            `;
+
+            div.onclick = () => {
+                idInput.value = key;
+                nameSpan.textContent = m.name;
+                modal.classList.add('hidden');
+
+                // Show/Hide slider depending on map type?
+                // Logic for that is: document.getElementById('map-size-group').style.display = (key === 'random') ? 'block' : 'none';
+                const sliderGroup = document.getElementById('map-size-group');
+                if (sliderGroup) sliderGroup.style.display = (m.type === 'random') ? 'block' : 'none';
+            };
+            list.appendChild(div);
+        });
+    }
+
+    // 2. Render Campaign Grid
+    const campaignList = document.getElementById('campaign-level-grid');
+    console.log("renderSetupScreens: campaignList found?", !!campaignList);
+
+    if (campaignList) {
+        campaignList.innerHTML = '';
+
+        const progress = getProgress();
+        console.log("renderSetupScreens: Loaded progress", progress);
+        console.log("renderSetupScreens: CAMPAIGN_LEVELS count", CAMPAIGN_LEVELS ? CAMPAIGN_LEVELS.length : 'null');
+
+        if (!CAMPAIGN_LEVELS || CAMPAIGN_LEVELS.length === 0) {
+            campaignList.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #888;">No campaign levels loaded.</div>';
+            console.warn("CAMPAIGN_LEVELS is empty");
+        } else {
+            CAMPAIGN_LEVELS.forEach(lvl => {
+                const isCompleted = progress.includes(lvl.index);
+                // Unlock ALL levels
+                // const isUnlocked = lvl.index === 0 || progress.includes(lvl.index - 1) || isCompleted;
+
+                const div = document.createElement('div');
+                div.className = `level-card ${isCompleted ? 'completed' : ''} unlocked`; // Always unlocked
+                if (state.selectedLevel && state.selectedLevel.index === lvl.index) {
+                    div.classList.add('active'); // Highlight if selected
+                }
+
+                // Icon: tile_1 if won, tile_2 if not
+                let icon = isCompleted ? `<img src="assets/tile_1.png" style="width:32px;">` : `<img src="assets/tile_2.png" style="width:32px;">`;
+
+                div.innerHTML = `
+                    ${icon}
+                    <span class="level-name" style="font-size: 0.7rem; color: #fff; margin-top: 4px;">${lvl.name}</span>
+                `;
+
+                div.onclick = () => {
+                    // Update Selection
+                    state.selectedLevel = lvl;
+                    // Redraw to update active class (lazy but effective for now)
+                    renderSetupScreens();
+                };
+
+                // Tooltip Logic
+                div.onmouseenter = (e) => showLevelTooltip(lvl, e.clientX, e.clientY);
+                div.onmousemove = (e) => updateLevelTooltip(e.clientX, e.clientY);
+                div.onmouseleave = () => hideLevelTooltip();
+
+                campaignList.appendChild(div);
+            });
+        }
+    }
+
+    // Wire up Start Campaign Button
+    const startCampBtn = document.getElementById('start-campaign-btn');
+    // Remove old listener to avoid stacking? 
+    // Cloning node is a quick hack to clear listeners
+    if (startCampBtn) {
+        const newBtn = startCampBtn.cloneNode(true);
+        startCampBtn.parentNode.replaceChild(newBtn, startCampBtn);
+        newBtn.addEventListener('click', () => {
+            if (state.selectedLevel) {
+                startCampaignLevel(state.selectedLevel);
+            } else {
+                alert("Please select a level first!");
+            }
+        });
+    }
+
+    // Wire up Clear History Button
+    const clearHistoryBtn = document.getElementById('clear-history-btn');
+    if (clearHistoryBtn) {
+        // Clone to clear listeners
+        const newClearBtn = clearHistoryBtn.cloneNode(true);
+        clearHistoryBtn.parentNode.replaceChild(newClearBtn, clearHistoryBtn);
+        newClearBtn.addEventListener('click', () => {
+            if (confirm("Are you sure you want to clear your campaign history? This cannot be undone.")) {
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+                state.selectedLevel = null;
+                renderSetupScreens(); // Re-render to update icons
+            }
+        });
+    }
+}
+
+// --- Tooltip Helpers ---
+function showLevelTooltip(lvl, x, y) {
+    let tooltip = document.getElementById('level-tooltip');
+    if (!tooltip) {
+        tooltip = document.createElement('div');
+        tooltip.id = 'level-tooltip';
+        tooltip.className = 'shop-tooltip'; // Reuse basic style
+        document.body.appendChild(tooltip);
+    }
+
+    // AI Difficulty Text
+    const aiLabels = ["Peaceful", "Easy", "Normal", "Hard", "Expert"];
+    const aiText = aiLabels[lvl.aiDifficulty] || "Normal";
+
+    tooltip.innerHTML = `
+        <h4>${lvl.name} (Level ${lvl.index + 1})</h4>
+        <div class="stats">
+            <div class="stat-row">Players: ${lvl.totalPlayers}</div>
+            <div class="stat-row">Map Size: ${lvl.mapSize} Hex</div>
+            <div class="stat-row">AI: ${aiText}</div>
+        </div>
+    `;
+
+    tooltip.classList.remove('hidden');
+    tooltip.style.display = 'block'; // Ensure visibility
+    updateLevelTooltip(x, y);
+}
+
+function updateLevelTooltip(x, y) {
+    const tooltip = document.getElementById('level-tooltip');
+    if (tooltip) {
+        const padding = 15;
+        let left = x + padding;
+        let top = y + padding;
+
+        // Boundary Check (Basic) - Keep it simple
+        if (left + 200 > window.innerWidth) left = x - 215;
+        if (top + 100 > window.innerHeight) top = y - 115;
+
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+    }
+}
+
+function hideLevelTooltip() {
+    const tooltip = document.getElementById('level-tooltip');
+    if (tooltip) {
+        tooltip.style.display = 'none';
+    }
+}
+
+function startCampaignLevel(lvl) {
+    // if (confirm(`Start Level ${lvl.index + 1}: ${lvl.name}?\nPlayers: ${lvl.totalPlayers} | Map: ${lvl.mapSize}`)) {
+    state.isCampaign = true;
+    state.currentLevel = lvl;
+    state.aiDifficulty = lvl.aiDifficulty;
+    startGame(1, lvl.totalPlayers, {
+        mapSize: lvl.mapSize,
+        mapId: 'random',
+        seed: lvl.seed
     });
-
-    // Load LOD Background (Static Texture)
-    const lodImg = new Image();
-    lodImg.src = 'assets/bg_lod.png';
-    lodImg.onload = () => {
-        state.bgLodSprite = lodImg;
-        // Pre-create pattern if context is available (it is global)
-        state.bgLodPattern = ctx.createPattern(lodImg, 'repeat');
-        checkLoad();
-    };
-    lodImg.onerror = checkLoad; // Proceed if missing (fallback to color)
-
-    close.addEventListener('click', () => modal.classList.add('hidden'));
-    window.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+    // }
 }
 
-function startGame(humans, total) {
-    const mapId = document.getElementById('selected-map-id').value || 'random';
-    state.players = [];
-    for (let i = 1; i <= total; i++) state.players.push({ id: i, type: i <= humans ? 'human' : 'ai' });
-    document.getElementById('setup-screen').classList.add('hidden');
-    document.getElementById('game-ui').classList.remove('hidden');
 
-    // Initial Resize to set correct dimensions including DPI
-    handleResize();
 
-    // Initial Resize to set correct dimensions including DPI
-    handleResize();
+// Initial Load of Textures (Players + Background + Water)
+const playerTextures = 6;
+const bgTextures = ['bg_tile_1.png', 'bg_tile_2.png', 'bg_tile_3.png'];
 
-    generateIsland(total, mapId);
-    refreshTerritories();
+const totalTextures = playerTextures + bgTextures.length + 3 + playerTextures + 1 + playerTextures + 4 + (playerTextures * 4) + 1 + 1; // Added +1 for bg_lod, +1 for grave
+let loadedCount = 0;
+state.playerSprites = {};
 
-    state.gameStarted = true;
+const checkLoad = () => {
+    loadedCount++;
+    if (loadedCount === totalTextures) render();
+};
 
-    centerCamera();
-    setupGameEvents();
-    initLeaderboard();
+const waterImg = new Image();
+waterImg.src = 'assets/water_tile.png';
+waterImg.onload = () => {
+    state.waterSprite = waterImg;
+    state.playerSprites[0] = waterImg; // Assign to Neutral/Ocean for rendering
+    checkLoad();
+    startRenderLoop();
+};
+waterImg.onerror = checkLoad; // Proceed even if fails
 
-    startTurn(); render(); updateUI();
+// Load Tree (User provided)
+const treeImg = new Image();
+treeImg.src = 'assets/tree.png';
+treeImg.onload = () => { state.treeSprite = treeImg; checkLoad(); };
+treeImg.onerror = checkLoad;
+
+// Load Capital (Default)
+const capitalImg = new Image();
+capitalImg.src = 'assets/capital.png';
+capitalImg.onload = () => { state.capitalSprite = capitalImg; checkLoad(); };
+capitalImg.onerror = checkLoad;
+
+// Load Player-Specific Capitals (Optional)
+state.capitalSprites = {};
+const PLAYERS_WITH_TILE_TEXTURES = [1, 2, 3, 4, 5, 6];
+const PLAYERS_WITH_UNIT_TEXTURES = [1];
+const PLAYERS_WITH_BUILDING_TEXTURES = [1];
+
+PLAYERS_WITH_BUILDING_TEXTURES.forEach(i => {
+    const tex = new Image();
+    tex.src = `assets/capital_${i}.png`;
+    tex.onload = () => { state.capitalSprites[i] = tex; checkLoad(); };
+    tex.onerror = checkLoad; // Count anyway so we don't hang
+});
+
+// Load Castle (Default)
+const castleImg = new Image();
+castleImg.src = 'assets/castle.png';
+castleImg.onload = () => { state.castleSprite = castleImg; checkLoad(); };
+castleImg.onerror = checkLoad;
+
+// Load Player-Specific Castles
+state.castleSprites = {};
+PLAYERS_WITH_BUILDING_TEXTURES.forEach(i => {
+    const tex = new Image();
+    tex.src = `assets/castle_${i}.png`;
+    tex.onload = () => { state.castleSprites[i] = tex; checkLoad(); };
+    tex.onerror = checkLoad;
+});
+
+// Load Unit Sprites (Default)
+state.unitSprites = {};
+const unitTypes = ['peasant', 'spearman', 'knight', 'baron'];
+unitTypes.forEach(u => {
+    const img = new Image();
+    img.src = `assets/${u}.png`;
+    img.onload = () => { state.unitSprites[u] = img; checkLoad(); };
+    img.onerror = checkLoad;
+});
+
+// Load Player-Specific Unit Sprites
+state.playerUnitSprites = {};
+PLAYERS_WITH_UNIT_TEXTURES.forEach(i => {
+    state.playerUnitSprites[i] = {};
+    unitTypes.forEach(u => {
+        const img = new Image();
+        img.src = `assets/${u}_${i}.png`;
+        img.onload = () => { state.playerUnitSprites[i][u] = img; checkLoad(); };
+        img.onerror = checkLoad; // Proceed if missing (fallback to default)
+    });
+});
+
+
+// Load Player Sprites
+
+
+for (let i = 1; i <= playerTextures; i++) {
+    if (!PLAYERS_WITH_TILE_TEXTURES.includes(i)) continue;
+    const tex = new Image();
+    tex.src = `assets/tile_${i}.png`;
+    tex.onload = checkLoad;
+    state.playerSprites[i] = tex;
 }
+
+// Load Grave Sprite
+const graveImg = new Image();
+graveImg.src = `assets/grave.png?v=${Date.now()}`; // Cache bust
+graveImg.onload = () => {
+    console.log("Grave sprite loaded successfully");
+    state.graveSprite = graveImg;
+    checkLoad();
+};
+graveImg.onerror = (e) => {
+    console.error("Failed to load grave sprite", e);
+    checkLoad();
+};
+
+// Load Background Sprites
+state.bgSprites = [];
+bgTextures.forEach(file => {
+    const img = new Image();
+    img.src = `assets/${file}`;
+    img.onload = checkLoad;
+    state.bgSprites.push(img);
+});
+
+// Load LOD Background (Static Texture)
+const lodImg = new Image();
+lodImg.src = 'assets/bg_lod.png';
+lodImg.onload = () => {
+    state.bgLodSprite = lodImg;
+    // Pre-create pattern if context is available (it is global)
+    state.bgLodPattern = ctx.createPattern(lodImg, 'repeat');
+    checkLoad();
+};
+lodImg.onerror = checkLoad; // Proceed if missing (fallback to color)
+
+
+
+
 
 function initLeaderboard() {
     const container = document.getElementById('players-container');
@@ -393,7 +634,10 @@ function setupGameEvents() {
     gameEventsSetup = true;
 
     window.addEventListener('resize', handleResize);
-    document.getElementById('end-turn-btn').addEventListener('click', endTurn);
+    document.getElementById('end-turn-btn').addEventListener('click', () => {
+        resetShopSelection();
+        endTurn();
+    });
 
     // Mouse Events for Pan/Zoom
     canvas.addEventListener('wheel', handleWheel, { passive: false });
@@ -404,7 +648,10 @@ function setupGameEvents() {
     // ... rest of events
     const modal = document.getElementById('help-modal');
     const gameOverModal = document.getElementById('game-over-modal');
-    document.getElementById('help-btn').addEventListener('click', () => modal.classList.remove('hidden'));
+    document.getElementById('help-btn').addEventListener('click', () => {
+        resetShopSelection();
+        modal.classList.remove('hidden');
+    });
     document.querySelectorAll('.close-modal').forEach(btn => btn.addEventListener('click', () => {
         modal.classList.add('hidden');
         document.getElementById('map-modal').classList.add('hidden');
@@ -414,7 +661,16 @@ function setupGameEvents() {
     });
 
     document.getElementById('restart-btn').addEventListener('click', restartGame);
-    document.getElementById('quit-btn').addEventListener('click', restartGame);
+    document.getElementById('quit-btn').addEventListener('click', () => {
+        resetShopSelection();
+        restartGame();
+    });
+
+    // Also bind recenter to cancel shop
+    document.getElementById('recenter-btn').addEventListener('click', () => {
+        resetShopSelection();
+        centerCamera();
+    });
 
     // Shop Button Logic
     const tooltip = document.getElementById('shop-tooltip');
@@ -544,15 +800,107 @@ function handleResize() {
     render();
 }
 
+// --- Seeded RNG ---
+let currentSeed = Math.random();
+function seed(s) {
+    if (typeof s === 'string') {
+        let h = 0x811c9dc5;
+        for (let i = 0; i < s.length; i++) {
+            h ^= s.charCodeAt(i);
+            h = Math.imul(h, 0x01000193);
+        }
+        currentSeed = h >>> 0;
+    } else {
+        currentSeed = s;
+    }
+}
+function rand() {
+    currentSeed = (currentSeed * 9301 + 49297) % 233280;
+    return currentSeed / 233280;
+}
+
+function startGame(humanCount, totalCount, config = null) {
+    // Stop any previous render loops
+    stopRenderLoop();
+    document.getElementById('setup-screen').classList.add('hidden');
+    document.getElementById('game-ui').classList.remove('hidden');
+
+    state.gameStarted = true;
+    state.gameOver = false;
+    state.turn = 1;
+    state.currentPlayerIdx = 0;
+    state.grid = new Map();
+    state.hexes = [];
+    state.players = [];
+    state.territories = new Map();
+    state.validTargets = new Set();
+    logContainer.innerHTML = '';
+
+    // Config Overrides (for Campaign)
+    const mapSize = config && config.mapSize ? config.mapSize : parseInt(document.getElementById('map-size-slider').value);
+    const mapKey = config && config.mapId ? config.mapId : document.getElementById('selected-map-id').value;
+    const aiLevel = config && config.aiDifficulty ? config.aiDifficulty : state.aiDifficulty;
+
+    // Set seed if provided (Campaign) or random
+    if (config && config.seed) seed(config.seed);
+    else seed(Math.random().toString());
+
+    state.aiDifficulty = aiLevel || 2;
+    state.isCampaign = !!(config && config.seed); // Flag for game over logic
+
+    console.log(`Starting Game: Map=${mapKey}, Size=${mapSize}, Players=${totalCount}, Humans=${humanCount}, AI_Level=${state.aiDifficulty} Seed=${currentSeed}`);
+
+    // Init Players
+    for (let i = 1; i <= totalCount; i++) {
+        state.players.push({ id: i, type: i <= humanCount ? 'human' : 'ai' });
+    }
+
+    generateIsland(totalCount, mapKey, mapSize);
+
+    // Safety check: ensure all players have land
+    const hasLand = (pid) => Array.from(state.grid.values()).some(c => c.playerId === pid);
+
+    let attempts = 0;
+    while (state.players.some(p => !hasLand(p.id)) && attempts < 10) {
+        console.warn("Some players have no land, regenerating...");
+        state.grid.clear();
+        state.hexes = [];
+        state.territories.clear();
+        seed(config && config.seed ? config.seed + attempts : Math.random().toString()); // Shift seed on retry
+        generateIsland(totalCount, mapKey, mapSize);
+        attempts++;
+    }
+
+    // Initialize Territories
+    refreshTerritories();
+
+    // Centering Logic
+    centerCamera();
+    state.camera.zoom = 1; // Reset zoom
+
+    setupGameEvents();
+    initLeaderboard();
+    startRenderLoop();
+
+    // Sidebar
+    document.querySelectorAll('.sidebar-section.ranking').forEach(el => el.classList.remove('hidden'));
+
+    startTurn();
+    updateUI();
+}
+
 function generateIsland(totalPlayers, mapType = 'random', forcedSize = null) {
-    let allHexes = [];
+    // Determine config
     const config = MAP_DEFINITIONS[mapType] || MAP_DEFINITIONS.random;
+    const size = forcedSize || 100;
+
+    let allHexes = [];
 
     if (config.type === 'hex') {
-        const size = config.size;
-        for (let q = -size; q <= size; q++) {
-            for (let r = -size; r <= size; r++) {
-                if (Math.abs(q + r) <= size) allHexes.push(new Hex(q, r));
+        const rad = config.size;
+        for (let q = -rad; q <= rad; q++) {
+            for (let r = -rad; r <= rad; r++) {
+                if (Math.abs(q + r) <= rad) allHexes.push(new Hex(q, r));
             }
         }
     } else if (config.type === 'random') {
@@ -566,9 +914,12 @@ function generateIsland(totalPlayers, mapType = 'random', forcedSize = null) {
         const addedHashes = new Set([center.toString()]);
         const frontier = center.getNeighbors();
 
+        // Use seeded rand if available, or math.random fallback logic is inside rand() if seeded correctly? 
+        // Note: rand() uses currentSeed globally. ensuring seeded randomness if seed() was called.
+
         while (allHexes.length < targetCount && frontier.length > 0) {
             // Pick random extension point
-            const idx = Math.floor(Math.random() * frontier.length);
+            const idx = Math.floor(rand() * frontier.length);
             const candidate = frontier[idx];
 
             // Remove efficiently
@@ -594,6 +945,11 @@ function generateIsland(totalPlayers, mapType = 'random', forcedSize = null) {
 
     // 1. Calculate fair quotas
     const totalCells = allHexes.length;
+    if (totalCells === 0) {
+        console.error("No hexes generated for map type:", mapType);
+        return;
+    }
+
     const tilesPerPlayer = Math.floor(totalCells / totalPlayers);
     const treesPerPlayer = Math.floor(tilesPerPlayer * 0.2); // 20% trees
     const remainder = totalCells % totalPlayers;
@@ -613,8 +969,9 @@ function generateIsland(totalPlayers, mapType = 'random', forcedSize = null) {
     }
 
     // 4. Shuffle hexes
+    // Use Fisher-Yates with seeded rand()
     for (let i = allHexes.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(rand() * (i + 1));
         [allHexes[i], allHexes[j]] = [allHexes[j], allHexes[i]];
     }
 
@@ -630,7 +987,18 @@ function generateIsland(totalPlayers, mapType = 'random', forcedSize = null) {
             cell.tree = info.tree;
             state.grid.set(hex.toString(), cell);
             state.hexes.push(cell); // Sync array for render loop
+
+            // Note: We need to sort hexes for correct Z-ordering in render.
+            // But render does a sort. If we want to optimize, we can sort state.hexes here.
+            // Let's rely on render's sort for now but ensure render handles it.
         }
+    });
+
+    // Initial sort for render performance?
+    state.hexes.sort((a, b) => {
+        const pay = Math.sqrt(3) / 2 * a.hex.q + Math.sqrt(3) * a.hex.r;
+        const pby = Math.sqrt(3) / 2 * b.hex.q + Math.sqrt(3) * b.hex.r;
+        return pay - pby;
     });
 }
 
@@ -845,6 +1213,18 @@ function refreshTerritories() {
                 if (c.building === 'capital') {
                     c.building = null;
                     c.tree = 'pine';
+                }
+            });
+        }
+
+        // Starvation Check: If no capital, units die immediately
+        // This handles splitting territories where a chunk is left without a capital (or is too small to have one)
+        const finalHasCapital = nt.cells.some(c => c.building === 'capital');
+        if (!finalHasCapital) {
+            nt.cells.forEach(c => {
+                if (c.unit) {
+                    c.unit = null;
+                    c.isGravestone = true;
                 }
             });
         }
@@ -1259,7 +1639,19 @@ function startTurn() {
                     t.cells.forEach(c => { if (c.unit) { c.unit = null; c.isGravestone = true; } });
                     t.money = 0; logEvent(`${PLAYER_COLORS[p.id].name} bankrupt!`, "system");
                 }
-            } else t.money = 0;
+            } else {
+                t.money = 0;
+                // Units without a capital starve
+                let starving = false;
+                t.cells.forEach(c => {
+                    if (c.unit) {
+                        c.unit = null;
+                        c.isGravestone = true;
+                        starving = true;
+                    }
+                });
+                if (starving && p.type === 'human') logEvent("Units starved (no capital)", "warning");
+            }
         }
     });
 
@@ -1308,13 +1700,37 @@ function endTurn() {
 
 function checkWin() {
     const playersAlive = new Set();
-    state.grid.forEach(c => { if (c.playerId !== 0) playersAlive.add(c.playerId); });
-    if (playersAlive.size === 1) {
+    state.grid.forEach(c => {
+        if (c.playerId !== 0 && c.building === 'capital') {
+            playersAlive.add(c.playerId);
+        }
+    });
+    const alive = Array.from(playersAlive);
+    if (alive.length === 1) {
         state.gameOver = true;
-        const winnerId = Array.from(playersAlive)[0];
-        const winner = PLAYER_COLORS[winnerId].name;
-        logEvent(`${winner} has conquered the island!`, "system");
-        showGameOver(winnerId, winner);
+        const winnerId = alive[0];
+        const winnerObj = state.players.find(p => p.id === winnerId);
+        const isHuman = winnerObj && winnerObj.type === 'human';
+
+        const winnerName = isHuman ? "You" : PLAYER_COLORS[winnerId].name;
+
+        // Campaign Progress Save
+        if (state.isCampaign && isHuman && state.currentLevel) {
+            saveLevelComplete(state.currentLevel.index);
+            // Refresh list to update icons
+            renderSetupScreens();
+        }
+
+        const stats = document.getElementById('game-stats');
+        const announce = document.getElementById('winner-announce');
+        document.getElementById('game-over-modal').classList.remove('hidden');
+        announce.textContent = `${winnerName} Wins!`;
+        announce.style.color = PLAYER_COLORS[winnerId].fill;
+
+        // Calculate Stats
+        let totalLand = 0; state.grid.forEach(c => { if (c.playerId === winnerId) totalLand++; });
+        logEvent(`${winnerName} has conquered the island!`, "system");
+        showGameOver(winnerId, winnerName);
     }
 }
 
@@ -1343,6 +1759,7 @@ function showGameOver(winnerId, winnerName) {
 }
 
 function restartGame() {
+    resetShopSelection();
     console.log("restartGame() called");
     document.getElementById('game-over-modal').classList.add('hidden');
     document.getElementById('game-ui').classList.add('hidden');
@@ -1364,9 +1781,40 @@ function restartGame() {
 }
 
 // --- AI Logic ---
+// --- AI Logic ---
 function runAITurn() {
     const pId = state.players[state.currentPlayerIdx].id;
     const ts = Array.from(state.territories.values()).filter(t => t.playerId === pId);
+
+    // AI Difficulty Dispatcher
+    const level = state.aiDifficulty || 2;
+    if (level === 1) aiEasy(pId, ts);
+    else if (level === 2) aiNormal(pId, ts);
+    else if (level === 3) aiHard(pId, ts);
+    else if (level === 4) aiExpert(pId, ts);
+
+    setTimeout(endTurn, 500);
+}
+
+// Level 1: Random & Erratic
+function aiEasy(pId, ts) {
+    ts.forEach(t => {
+        // Randomly buy peasants
+        while (t.cells.some(c => c.building === 'capital') && t.money >= 10 && Math.random() > 0.3) {
+            const spot = t.cells.find(c => !c.unit && !c.building && !c.tree);
+            if (spot) { spot.unit = 'peasant'; t.money -= 10; } else break;
+        }
+        // Move randomly
+        t.cells.filter(c => c.unit && !c.hasMoved).forEach(cell => {
+            const ns = cell.hex.getNeighbors().map(h => state.grid.get(h.toString())).filter(n => n);
+            const valid = ns.filter(n => (n.playerId !== pId && checkAttack(STRENGTHS[cell.unit], n)) || (n.playerId === pId && !n.building && !n.unit));
+            if (valid.length > 0) executeMove(cell, valid[Math.floor(Math.random() * valid.length)]);
+        });
+    });
+}
+
+// Level 2: Normal (Baseline)
+function aiNormal(pId, ts) {
     ts.forEach(t => {
         const hasCap = t.cells.some(c => c.building === 'capital');
         while (hasCap && t.money >= 10) {
@@ -1376,14 +1824,115 @@ function runAITurn() {
         t.cells.filter(c => c.unit && !c.hasMoved).forEach(cell => {
             const ns = cell.hex.getNeighbors().map(h => state.grid.get(h.toString())).filter(n => n);
             const targets = ns.filter(n => n.playerId !== pId && checkAttack(STRENGTHS[cell.unit], n));
-            if (targets.length > 0) executeMove(cell, targets[0]);
+            if (targets.length > 0) executeMove(cell, targets[0]); // Prioritize attack
             else {
                 const own = ns.filter(n => n.playerId === pId && !n.building);
                 if (own.length > 0) executeMove(cell, own[Math.floor(Math.random() * own.length)]);
             }
         });
     });
-    setTimeout(endTurn, 500);
+}
+
+// Level 3: Hard (Strategic & Defensive)
+function aiHard(pId, ts) {
+    ts.forEach(t => {
+        const hasCap = t.cells.some(c => c.building === 'capital');
+        const income = t.getIncome();
+        let wages = t.getWages();
+
+        // 1. Defend borders with Castles if rich
+        if (hasCap && t.money >= 15) {
+            const borderCells = t.cells.filter(c => !c.building && !c.unit && !c.tree && c.hex.getNeighbors().some(h => {
+                const n = state.grid.get(h.toString());
+                return n && n.playerId !== pId;
+            }));
+            if (borderCells.length > 0 && Math.random() > 0.5) {
+                const site = borderCells[Math.floor(Math.random() * borderCells.length)];
+                site.building = 'castle'; t.money -= 15;
+            }
+        }
+
+        // 2. Buy Units safely (check budget)
+        while (hasCap && t.money >= 10 && wages + 2 <= income) { // Keep wages within income
+            const spot = t.cells.find(c => !c.unit && !c.building && !c.tree);
+            if (!spot) break;
+            spot.unit = 'peasant'; t.money -= 10; wages += 2;
+        }
+
+        // 3. Move with purpose
+        t.cells.filter(c => c.unit && !c.hasMoved).forEach(cell => {
+            const ns = cell.hex.getNeighbors().map(h => state.grid.get(h.toString())).filter(n => n);
+
+            // Priority 1: Kill weak enemies
+            const killable = ns.filter(n => n.playerId !== pId && checkAttack(STRENGTHS[cell.unit], n));
+            if (killable.length > 0) { executeMove(cell, killable[0]); return; }
+
+            // Priority 2: Protect territory (stay close to important bits? No, spread out)
+            // Priority 3: Merge if weak?
+            const own = ns.filter(n => n.playerId === pId && !n.building);
+            if (own.length > 0) executeMove(cell, own[Math.floor(Math.random() * own.length)]);
+        });
+    });
+}
+
+// Level 4: Expert (Perfect / Greedy)
+function aiExpert(pId, ts) {
+    ts.forEach(t => {
+        const hasCap = t.cells.some(c => c.building === 'capital');
+        const income = t.getIncome();
+        let currentWages = t.getWages();
+
+        // 1. Calculate optimal expansion
+        // Always buy max units that income sustains (Aggressive Expansion)
+        // Or if threatened, promote units?
+        // Slay strategy: Expand rapidly with peasants. Merge only when blocked.
+
+        while (hasCap && t.money >= 10 && currentWages + 2 <= income) {
+            // Find frontier spot
+            const frontier = t.cells.find(c => !c.unit && !c.building && !c.tree && c.hex.getNeighbors().some(h => {
+                const n = state.grid.get(h.toString());
+                return n && n.playerId !== pId;
+            }));
+            const spot = frontier || t.cells.find(c => !c.unit && !c.building && !c.tree);
+
+            if (!spot) break;
+            spot.unit = 'peasant'; t.money -= 10; currentWages += 2;
+        }
+
+        // 2. Optimal Moves
+        // Iterate units from strongest to weakest to open paths?
+        // Or closest to enemy?
+        const mobileUnits = t.cells.filter(c => c.unit && !c.hasMoved).sort((a, b) => STRENGTHS[b.unit] - STRENGTHS[a.unit]);
+
+        mobileUnits.forEach(cell => {
+            const ns = cell.hex.getNeighbors().map(h => state.grid.get(h.toString())).filter(n => n);
+
+            // Priority 1: Expanding into empty/tree land (Gain Income)
+            const expansions = ns.filter(n => n.playerId !== pId && n.unit === null && n.building === null && checkAttack(STRENGTHS[cell.unit], n));
+
+            // Priority 2: Killing Enemy Units (Reduce their income/strength)
+            const kills = ns.filter(n => n.playerId !== pId && n.unit !== null && checkAttack(STRENGTHS[cell.unit], n));
+
+            // Priority 3: Capturing Buildings (High value) (Already covered by checkAttack but prioritized)
+
+            let target = null;
+            if (kills.length > 0) target = kills[0];
+            else if (expansions.length > 0) target = expansions[0];
+
+            if (target) {
+                executeMove(cell, target);
+            } else {
+                // If stuck, merge to front?
+                const own = ns.filter(n => n.playerId === pId && !n.building && (!n.unit || (n.unit && MERGE_MAP[`${cell.unit}+${n.unit}`])));
+                // Move towards nearest enemy? Dijkstra? Too expensive for JS? 
+                // Just random internal move for now, but bias towards borders.
+                const border = own.find(n => n.hex.getNeighbors().some(h => { const k = state.grid.get(h.toString()); return k && k.playerId !== pId; }));
+
+                if (border) executeMove(cell, border);
+                else if (own.length > 0) executeMove(cell, own[0]);
+            }
+        });
+    });
 }
 
 // --- Rendering & UI ---
@@ -1490,6 +2039,10 @@ function updateLeaderboard() {
 function logEvent(msg, type = '') {
     const e = document.createElement('p'); e.className = `log-entry ${type}`;
     e.textContent = msg; logContainer.prepend(e);
+    // Limit log size to prevent DOM bloat
+    if (logContainer.children.length > 50) {
+        logContainer.lastElementChild.remove();
+    }
 }
 
 function drawHex(ctx, x, y, size, cell) {
@@ -1576,8 +2129,7 @@ function drawHex(ctx, x, y, size, cell) {
         } else {
             drawIcon(ctx, x, surfaceY, '🏰');
         }
-    }
-    if (cell.unit) {
+    } else if (cell.unit) {
         // Check for player-specific sprite first, then default
         const pSprites = state.playerUnitSprites && state.playerUnitSprites[cell.playerId];
         const specificSprite = pSprites && pSprites[cell.unit];
@@ -1656,7 +2208,20 @@ function drawHex(ctx, x, y, size, cell) {
             drawIcon(ctx, x, surfaceY, cell.tree === 'pine' ? '🌲' : '🌴');
         }
     }
-    if (cell.isGravestone) drawIcon(ctx, x, surfaceY, '🪦');
+    if (cell.isGravestone) {
+        if (state.graveSprite && state.graveSprite.complete && state.graveSprite.naturalWidth !== 0) {
+            // Preserve aspect ratio
+            const sprite = state.graveSprite;
+            // Scale based on height to fit within tile height nicely
+            const scale = (size * 1.2) / sprite.height;
+            const h = sprite.height * scale;
+            const w = sprite.width * scale;
+
+            ctx.drawImage(sprite, x - w / 2, surfaceY - h / 2, w, h);
+        } else {
+            drawIcon(ctx, x, surfaceY, '🪦');
+        }
+    }
 
     // Draw Valid Target Highlight
     if (state.validTargets.has(cell.hex.toString())) {
@@ -1959,7 +2524,9 @@ function render(timestamp) {
     }
 
     // Sort cells by depth (Y coordinate) to ensure correct overlap for 3D tiles
-    const sortedCells = Array.from(state.grid.values()).sort((a, b) => {
+    // Use cached array if available
+    const source = (state.hexes && state.hexes.length > 0) ? state.hexes : Array.from(state.grid.values());
+    const sortedCells = source.sort((a, b) => {
         const pay = Math.sqrt(3) / 2 * a.hex.q + Math.sqrt(3) * a.hex.r; // Inline simplified Y calc
         const pby = Math.sqrt(3) / 2 * b.hex.q + Math.sqrt(3) * b.hex.r;
         return pay - pby;
@@ -1997,7 +2564,7 @@ function initSetupBackground() {
     // Generate random 100-hex island
     console.log("Generating island...");
     generateIsland(6, 'random', 100);
-    console.log("Island generated. Grid size:", state.grid.size, "Hexes array length:", state.hexes.length);
+    console.log("Island generated. Grid size:", state.grid.size);
 
     handleResize();
     centerCamera();
@@ -2011,8 +2578,10 @@ function initSetupBackground() {
     startRenderLoop();
 }
 
-setup();
-initSetupBackground();
+document.addEventListener('DOMContentLoaded', () => {
+    initSetupBackground();
+    setup();
+});
 
 document.getElementById('recenter-btn').addEventListener('click', centerCamera);
 

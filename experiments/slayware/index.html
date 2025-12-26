@@ -21,48 +21,91 @@
         </div>
         <div class="setup-card glass">
             <h2>SlayWare Setup</h2>
-            <p>Divide and Conquer the Island.</p>
+            <p>Turn-based strategy game<br />
+                Inspired by Sean O'Connor's Slay<br />
+                Divide and conquer to protect the island from the conquistadors</p>
 
-            <div class="setup-form">
-                <div class="form-group">
-                    <label>Human Players</label>
-                    <div class="player-count-select">
-                        <button class="count-btn active" data-humans="1">1</button>
-                        <button class="count-btn" data-humans="2">2</button>
-                        <button class="count-btn" data-humans="3">3</button>
-                        <button class="count-btn" data-humans="4">4</button>
+            <div class="setup-tabs">
+                <button class="setup-tab active" data-target="quickplay">
+                    <i class="fas fa-play"></i> Quick Play
+                </button>
+                <button class="setup-tab" data-target="campaign">
+                    <i class="fas fa-flag"></i> Campaign
+                </button>
+            </div>
+
+            <!-- TAB: QUICK PLAY -->
+            <div id="tab-quickplay" class="setup-panel active">
+                <div class="setup-form">
+                    <div class="form-group">
+                        <label>Human Players</label>
+                        <div class="player-count-select">
+                            <button class="count-btn active" data-humans="1">1</button>
+                            <button class="count-btn" data-humans="2">2</button>
+                            <button class="count-btn" data-humans="3">3</button>
+                            <button class="count-btn" data-humans="4">4</button>
+                        </div>
                     </div>
-                </div>
 
-                <div class="form-group">
-                    <label>Total Players (Humans + AI)</label>
-                    <div class="player-count-select">
-                        <button class="total-btn" data-total="2">2</button>
-                        <button class="total-btn" data-total="3">3</button>
-                        <button class="total-btn" data-total="4">4</button>
-                        <button class="total-btn" data-total="5">5</button>
-                        <button class="total-btn active" data-total="6">6</button>
+                    <div class="form-group">
+                        <label>Total Players (Humans + AI)</label>
+                        <div class="player-count-select">
+                            <button class="total-btn" data-total="2">2</button>
+                            <button class="total-btn" data-total="3">3</button>
+                            <button class="total-btn" data-total="4">4</button>
+                            <button class="total-btn" data-total="5">5</button>
+                            <button class="total-btn active" data-total="6">6</button>
+                        </div>
                     </div>
+
+                    <div class="form-group">
+                        <label>AI Level</label>
+                        <div class="toggle-group" id="ai-level-group">
+                            <button class="toggle-btn ai-btn" data-level="1" title="Easy (Random)">
+                                <img src="assets/shop_peasant.png" class="icon-sm">
+                            </button>
+                            <button class="toggle-btn ai-btn active" data-level="2" title="Normal">
+                                <img src="assets/shop_spearman.png" class="icon-sm">
+                            </button>
+                            <button class="toggle-btn ai-btn" data-level="3" title="Hard (Strategic)">
+                                <img src="assets/shop_knight.png" class="icon-sm">
+                            </button>
+                            <button class="toggle-btn ai-btn" data-level="4" title="Expert (Perfect)">
+                                <img src="assets/shop_baron.png" class="icon-sm">
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Map Type</label>
+                        <button id="select-map-btn" class="secondary-btn wide">
+                            <i class="fas fa-dice"></i> <span id="selected-map-name">Random</span>
+                        </button>
+                        <input type="hidden" id="selected-map-id" value="random">
+                    </div>
+
+                    <div id="map-size-group" class="form-group">
+                        <label>Map Size <span id="map-size-display" style="float: right; color: var(--color-muted);">100
+                                Hexes</span></label>
+                        <input type="range" id="map-size-slider" min="50" max="500" value="100" step="10"
+                            style="width: 100%; accent-color: var(--color-accent);">
+                    </div>
+
+                    <button id="start-game-btn" class="primary-btn wide pulse">Start Conquest</button>
                 </div>
+            </div>
 
-                <div class="form-group">
-                    <label>Map Type</label>
-                    <button id="select-map-btn" class="secondary-btn wide">
-                        <i class="fas fa-map"></i> <span id="selected-map-name">Random</span>
-                    </button>
-                    <!-- Hidden input to store selection -->
-                    <input type="hidden" id="selected-map-id" value="random">
+            <!-- TAB: CAMPAIGN -->
+            <div id="tab-campaign" class="setup-panel">
+                <div id="campaign-level-grid" class="campaign-grid">
+                    <!-- Populated by JS -->
                 </div>
-
-                <div id="map-size-group" class="form-group">
-                    <label>Map Size <span id="map-size-display" style="float: right; color: var(--color-muted);">100
-                            Hexes</span></label>
-                    <input type="range" id="map-size-slider" min="50" max="500" value="100" step="10"
-                        style="width: 100%; accent-color: var(--color-accent);">
+                <button id="start-campaign-btn" class="primary-btn wide pulse" style="margin-top: 1rem;">Start
+                    Conquest</button>
+                <div style="text-align: center; margin-top: 0.5rem;">
+                    <button id="clear-history-btn" class="text-btn discrete"
+                        style="font-size: 0.8rem; opacity: 0.6;">Clear History</button>
                 </div>
-
-                <button id="start-game-btn" class="primary-btn wide">Start Conquest</button>
-
             </div>
         </div>
     </div>
@@ -108,7 +151,7 @@
                     <h3>Action Indicators</h3>
                     <ul>
                         <li><span style="color:red; font-weight:bold;">●</span> <strong>Red Dot (Unit):</strong> This
-                            unit is ready to act ("Jumping man").</li>
+                            unit is ready to act.</li>
                         <li><span style="color:red; font-weight:bold;">●</span> <strong>Red Dot (Capital):</strong>
                             Treasury has enough money to buy units or castles.</li>
                     </ul>
@@ -132,9 +175,6 @@
                         <li><strong>Wages:</strong> Peasant(2), Spearman(6), Knight(18), Baron(54).</li>
                         <li><strong>Bankruptcy:</strong> If wages exceed money at turn start, all units die and become
                             trees!</li>
-                        <li><strong>Costs:</strong> New Peasants cost 10<img src="assets/coin.png" class="coin-icon"
-                                style="width:14px;height:14px;">, Castles cost 15<img src="assets/coin.png"
-                                class="coin-icon" style="width:14px;height:14px;">.</li>
                     </ul>
 
                     <h3>Merging</h3>
